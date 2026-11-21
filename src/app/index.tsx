@@ -77,7 +77,7 @@ export default function Home() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? s.goodMorning : s.goodEvening;
   const name = settings.name.trim();
-  const cheer = withName(pickForDay(s.encouragements, today), name, settings.language);
+  const cheer = withName(pickForDay(s.encouragements, today), name, s);
   const lv = levelFor(data?.stats.xp ?? 0);
   const minutes = data?.minutesToday ?? 0;
   const maxUpcoming = Math.max(1, ...(data?.upcoming.map((u) => u.n) ?? [1]));

@@ -60,6 +60,27 @@ export default function Settings() {
         </Row>
       </Section>
 
+      {settings.language === 'ar' ? (
+        <Section title={s.iAm}>
+          <Row gap={Spacing.two}>
+            <Button
+              style={{ flex: 1 }}
+              variant={settings.gender === 'm' ? 'primary' : 'ghost'}
+              icon="🧑‍🎓"
+              title={s.male}
+              onPress={() => updateSettings({ gender: 'm' })}
+            />
+            <Button
+              style={{ flex: 1 }}
+              variant={settings.gender === 'f' ? 'primary' : 'ghost'}
+              icon="👩‍🎓"
+              title={s.female}
+              onPress={() => updateSettings({ gender: 'f' })}
+            />
+          </Row>
+        </Section>
+      ) : null}
+
       <Section title={s.todayGoal}>
         <Card>
           <Row style={{ justifyContent: 'space-between' }}>

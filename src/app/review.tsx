@@ -78,7 +78,7 @@ export default function Review() {
             <GradientCard style={{ alignItems: 'center' }}>
               <Text style={{ fontSize: 64 }}>🏆</Text>
               <Txt variant="title" color="#fff" center>
-                {withName(pickForDay(s.praise, today, total), settings.name, settings.language)}
+                {withName(pickForDay(s.praise, today, total), settings.name, s)}
               </Txt>
               <Txt color="#ffffffdd" center>
                 {s.reviewDone}

@@ -1,6 +1,6 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Text, View } from 'react-native';
 import Animated, { FadeIn, SlideInRight, ZoomIn } from 'react-native-reanimated';
 
@@ -66,38 +66,34 @@ export default function Study() {
   const [queue, setQueue] = useState<PageWithSubject[] | null>(null);
   const [index, setIndex] = useState(0);
   const [studied, setStudied] = useState(0);
-  const [keywords, setKeywords] = useState('');
-  const [question, setQuestion] = useState('');
   const [limitReached, setLimitReached] = useState(false);
+  const [extra, setExtra] = useState(0);
   const seconds = useStudyClock(db);
   const goal = settings.dailyMinutes * 60;
 
-  const load = useCallback(
-    async (extra = 0) => {
+  useEffect(() => {
+    let alive = true;
+    (async () => {
       const done = await studiedTodayCount(db);
       const left = Math.max(0, settings.newPerDay - done) + extra;
       const list = await nextNewPages(db, left, subjectId);
+      return { left, list };
+    })().then(({ left, list }) => {
+      if (!alive) return;
       setLimitReached(left === 0);
       setQueue(list);
       setIndex(0);
-    },
-    [db, settings.newPerDay, subjectId],
-  );
-
-  useEffect(() => {
-    load();
-  }, [load]);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [db, settings.newPerDay, subjectId, extra]);
 
   const page = queue?.[index];
 
-  useEffect(() => {
-    setKeywords(page?.keywords ?? '');
-    setQuestion(page?.question ?? '');
-  }, [page?.id, page?.keywords, page?.question]);
-
-  const finishPage = async () => {
+  const finishPage = async (notes: { keywords: string; question: string }) => {
     if (!page) return;
-    await updatePageNotes(db, page.id, { keywords: keywords.trim(), question: question.trim() });
+    await updatePageNotes(db, page.id, notes);
     await markStudied(db, page.id, todayStr());
     haptic('success');
     playSound('correct');
@@ -133,7 +129,7 @@ export default function Study() {
             <GradientCard style={{ alignItems: 'center' }}>
               <Text style={{ fontSize: 64 }}>🎉</Text>
               <Txt variant="title" color="#fff" center>
-                {withName(pickForDay(s.praise, todayStr(), studied), name, settings.language)}
+                {withName(pickForDay(s.praise, todayStr(), studied), name, s)}
               </Txt>
               <Txt color="#ffffffdd" center>
                 {s.studiedPages(studied)}
@@ -146,7 +142,7 @@ export default function Study() {
         )}
         {header}
         {limitReached || studied > 0 ? (
-          <Button variant="secondary" icon="➕" title={s.studyMore} onPress={() => load(1)} />
+          <Button variant="secondary" icon="➕" title={s.studyMore} onPress={() => setExtra((n) => n + 1)} />
         ) : null}
         <Button title={s.backHome} onPress={() => router.back()} />
       </Screen>
@@ -158,32 +154,58 @@ export default function Study() {
       <Screen>
         <Stack.Screen options={{ title: `${s.studySession} · ${s.of(index + 1, queue.length)}` }} />
         {header}
-        <Animated.View key={page.id} entering={SlideInRight.duration(300)} style={{ gap: Spacing.four }}>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <Txt variant="heading" style={{ flex: 1 }} numberOfLines={1}>
-              {page.subject_title}
-            </Txt>
-            <Pill text={page.label} />
-          </Row>
-          <PageView page={page} />
-          <Animated.View entering={FadeIn.delay(200)}>
-            <Txt variant="caption" muted>
-              💡 {s.studyHint}
-            </Txt>
-          </Animated.View>
-          <Input
-            label={s.keywords}
-            placeholder={s.keywordsPlaceholder}
-            value={keywords}
-            onChangeText={setKeywords}
-            multiline
-          />
-          <Input label={s.question} placeholder={s.questionPlaceholder} value={question} onChangeText={setQuestion} />
-          <View>
-            <Button title={s.doneWithPage} onPress={finishPage} />
-          </View>
-        </Animated.View>
+        <StudyCard key={page.id} page={page} onDone={finishPage} />
       </Screen>
     </KeyboardAvoidingView>
+  );
+}
+
+function StudyCard({
+  page,
+  onDone,
+}: {
+  page: PageWithSubject;
+  onDone: (notes: { keywords: string; question: string }) => Promise<void>;
+}) {
+  const { s } = useApp();
+  const [keywords, setKeywords] = useState(page.keywords);
+  const [question, setQuestion] = useState(page.question);
+  const [saving, setSaving] = useState(false);
+
+  const done = async () => {
+    setSaving(true);
+    try {
+      await onDone({ keywords: keywords.trim(), question: question.trim() });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Animated.View entering={SlideInRight.duration(300)} style={{ gap: Spacing.four }}>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <Txt variant="heading" style={{ flex: 1 }} numberOfLines={1}>
+          {page.subject_title}
+        </Txt>
+        <Pill text={page.label} />
+      </Row>
+      <PageView page={page} />
+      <Animated.View entering={FadeIn.delay(200)}>
+        <Txt variant="caption" muted>
+          💡 {s.studyHint}
+        </Txt>
+      </Animated.View>
+      <Input
+        label={s.keywords}
+        placeholder={s.keywordsPlaceholder}
+        value={keywords}
+        onChangeText={setKeywords}
+        multiline
+      />
+      <Input label={s.question} placeholder={s.questionPlaceholder} value={question} onChangeText={setQuestion} />
+      <View>
+        <Button title={s.doneWithPage} onPress={done} loading={saving} />
+      </View>
+    </Animated.View>
   );
 }

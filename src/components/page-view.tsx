@@ -11,7 +11,13 @@ import { useApp } from '@/lib/app-context';
 import type { Page } from '@/lib/db';
 
 async function openPdf(uri: string) {
-  if (Platform.OS !== 'web' && (await Sharing.isAvailableAsync())) {
+  if (Platform.OS === 'web') {
+    // Browsers refuse to navigate to data: links, so open a blob copy in a new tab.
+    const blob = await (await fetch(uri)).blob();
+    window.open(URL.createObjectURL(blob), '_blank');
+    return;
+  }
+  if (await Sharing.isAvailableAsync()) {
     await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
   } else {
     await Linking.openURL(uri);

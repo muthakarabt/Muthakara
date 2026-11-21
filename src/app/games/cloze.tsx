@@ -1,6 +1,6 @@
 import { Stack, router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, { BounceIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 
@@ -28,31 +28,30 @@ export default function ClozeGame() {
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<string | null>(null);
   const [score, setScore] = useState(0);
-  const [awarded, setAwarded] = useState(false);
-
-  const start = useCallback(async () => {
-    const pool = await gamePool(db);
-    setRounds(makeClozeRounds(pool, ROUNDS));
-    setIndex(0);
-    setPicked(null);
-    setScore(0);
-    setAwarded(false);
-  }, [db]);
+  const [game, setGame] = useState(0);
 
   useEffect(() => {
-    start();
-  }, [start]);
+    let alive = true;
+    gamePool(db).then((pool) => {
+      if (!alive) return;
+      setRounds(makeClozeRounds(pool, ROUNDS));
+      setIndex(0);
+      setPicked(null);
+      setScore(0);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [db, game]);
+
+  const playAgain = () => {
+    setRounds(null);
+    setGame((g) => g + 1);
+  };
 
   const round = rounds?.[index];
   const finished = rounds !== null && rounds.length > 0 && index >= rounds.length;
   const perfect = finished && score === rounds.length;
-
-  useEffect(() => {
-    if (!finished || awarded) return;
-    setAwarded(true);
-    playSound('complete');
-    award(score * XP.gameCorrect + (perfect ? XP.gamePerfectBonus : 0), perfect ? 'game_perfect' : 'game');
-  }, [finished, awarded, score, perfect, award]);
 
   const choose = (option: string) => {
     if (!round || picked) return;
@@ -68,6 +67,11 @@ export default function ClozeGame() {
   };
 
   const next = () => {
+    if (rounds && index + 1 >= rounds.length) {
+      const perfectRun = score === rounds.length;
+      playSound('complete');
+      award(score * XP.gameCorrect + (perfectRun ? XP.gamePerfectBonus : 0), perfectRun ? 'game_perfect' : 'game');
+    }
     setPicked(null);
     setIndex((i) => i + 1);
   };
@@ -92,7 +96,7 @@ export default function ClozeGame() {
           <GradientCard style={{ alignItems: 'center' }}>
             <Text style={{ fontSize: 64 }}>{perfect ? '🎯' : '🧩'}</Text>
             <Txt variant="title" color="#fff" center>
-              {perfect ? s.perfect : withName(pickForDay(s.praise, todayStr(), score), settings.name, settings.language)}
+              {perfect ? s.perfect : withName(pickForDay(s.praise, todayStr(), score), settings.name, s)}
             </Txt>
             <Txt variant="hero" color="#fff" center>
               {s.score(score, rounds.length)}
@@ -100,7 +104,7 @@ export default function ClozeGame() {
             <Pill text={s.xpGained(score * XP.gameCorrect + (perfect ? XP.gamePerfectBonus : 0))} />
           </GradientCard>
         </Animated.View>
-        <Button icon="🔄" title={s.playAgain} onPress={start} />
+        <Button icon="🔄" title={s.playAgain} onPress={playAgain} />
         <Button variant="ghost" title={s.backHome} onPress={() => router.back()} />
       </Screen>
     );

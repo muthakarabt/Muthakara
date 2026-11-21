@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { I18nManager } from 'react-native';
 
 import { DEFAULT_SETTINGS, getSettings, saveSettings, type Settings } from '@/lib/db';
-import { dictionaries, type Strings } from '@/lib/i18n';
+import { getStrings, type Strings } from '@/lib/i18n';
 import { setSoundEnabled } from '@/lib/sound';
 
 type AppContextValue = {
@@ -44,7 +44,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ready,
       settings,
       updateSettings,
-      s: dictionaries[settings.language],
+      s: getStrings(settings.language, settings.gender),
       rtl: settings.language === 'ar',
     }),
     [ready, settings, updateSettings],
@@ -64,9 +64,12 @@ export function useApp(): AppContextValue {
  * The app language can differ from the system direction, so we flip relative to
  * whatever direction React Native is already using.
  */
+// react-native-web has no `isRTL` field, only getConstants().
+const SYSTEM_RTL = Boolean(I18nManager.isRTL ?? I18nManager.getConstants?.().isRTL);
+
 export function useDirection() {
   const { rtl } = useApp();
-  const flip = rtl !== I18nManager.isRTL;
+  const flip = rtl !== SYSTEM_RTL;
   return {
     rtl,
     row: (flip ? 'row-reverse' : 'row') as 'row' | 'row-reverse',

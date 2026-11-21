@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { Stack, router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, {
   FadeIn,
@@ -104,33 +104,32 @@ export default function MatchGame() {
   const [matched, setMatched] = useState<Set<number>>(new Set());
   const [wrong, setWrong] = useState<string[]>([]);
   const [mistakes, setMistakes] = useState(0);
-  const [awarded, setAwarded] = useState(false);
-
-  const start = useCallback(async () => {
-    const pool = await gamePool(db);
-    setBoard(makeMatch(pool, 4));
-    setPrompt(null);
-    setMatched(new Set());
-    setWrong([]);
-    setMistakes(0);
-    setAwarded(false);
-  }, [db]);
+  const [game, setGame] = useState(0);
 
   useEffect(() => {
-    start();
-  }, [start]);
+    let alive = true;
+    gamePool(db).then((pool) => {
+      if (!alive) return;
+      setBoard(makeMatch(pool, 4));
+      setPrompt(null);
+      setMatched(new Set());
+      setWrong([]);
+      setMistakes(0);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [db, game]);
+
+  const playAgain = () => {
+    setBoard(undefined);
+    setGame((g) => g + 1);
+  };
 
   const total = board?.prompts.length ?? 0;
   const done = board != null && matched.size === total;
   const perfect = done && mistakes === 0;
   const points = total * XP.gameCorrect + (perfect ? XP.gamePerfectBonus : 0);
-
-  useEffect(() => {
-    if (!done || awarded) return;
-    setAwarded(true);
-    playSound('complete');
-    award(points, perfect ? 'game_perfect' : 'game');
-  }, [done, awarded, points, perfect, award]);
 
   const pickPrompt = (card: MatchCard) => {
     playSound('tap');
@@ -147,7 +146,13 @@ export default function MatchGame() {
     if (card.pairId === prompt.pairId) {
       playSound('correct');
       haptic('success');
-      setMatched((m) => new Set(m).add(card.pairId));
+      const nextMatched = new Set(matched).add(card.pairId);
+      setMatched(nextMatched);
+      if (nextMatched.size === total) {
+        const perfectRun = mistakes === 0;
+        playSound('complete');
+        award(total * XP.gameCorrect + (perfectRun ? XP.gamePerfectBonus : 0), perfectRun ? 'game_perfect' : 'game');
+      }
       setPrompt(null);
       setWrong([]);
     } else {
@@ -222,7 +227,7 @@ export default function MatchGame() {
             <Pill text={s.xpGained(points)} />
           </GradientCard>
           <Animated.View entering={FadeIn.delay(300)} style={{ gap: Spacing.three }}>
-            <Button icon="🔄" title={s.playAgain} onPress={start} />
+            <Button icon="🔄" title={s.playAgain} onPress={playAgain} />
             <Button variant="ghost" title={s.backHome} onPress={() => router.back()} />
           </Animated.View>
         </Animated.View>

@@ -3,6 +3,10 @@ import { daysBetween } from '@/lib/srs';
 
 const ar = {
   appName: 'مذاكرة',
+  fallbackName: 'بطل',
+  iAm: 'أنا',
+  male: 'طالب',
+  female: 'طالبة',
   tagline: 'قليل كل يوم… يبقى معك للأبد',
 
   // onboarding
@@ -190,6 +194,10 @@ type Dict = typeof ar;
 
 const en: Dict = {
   appName: 'Muthakara',
+  fallbackName: 'champ',
+  iAm: 'I am',
+  male: 'Male student',
+  female: 'Female student',
   tagline: 'A little every day… stays with you for good',
 
   welcomeTitle: 'Welcome to Muthakara',
@@ -361,14 +369,66 @@ const en: Dict = {
   praise: ['Excellent, {name}!', 'Great job, {name} 👏', 'Well done, {name}!', 'Brilliant, {name} 🌟'],
 };
 
-export const dictionaries: Record<Language, Dict> = { ar, en };
+/** Arabic addresses the reader by gender; these replace the masculine wording. */
+const arFemale: Dict = {
+  ...ar,
+  fallbackName: 'بطلة',
+  startReview: 'ابدئي المراجعة',
+  startStudy: 'ابدئي الدراسة',
+  addPages: 'أضيفي صفحات',
+  streakDays: (n: number) => (n === 0 ? 'ابدئي سلسلتك اليوم' : ar.streakDays(n)),
+  resetProgress: 'ابدئي من جديد',
+  sessionDone: 'أحسنتِ! انتهت الجلسة',
+  namePlaceholder: 'اكتبي اسمك',
+  welcomeBody:
+    'ادرسي صفحات قليلة كل يوم في جلسة قصيرة، وسيذكّرك التطبيق بمراجعتها بعد 1 ثم 3 ثم 7 ثم 14 ثم 30 يوماً حتى تثبت في ذاكرتك.',
+  noSubjects: 'ما عندك مواد بعد. أضيفي مادة ثم صوّري صفحاتها أو ارفعي ملف PDF.',
+  noPages: 'ما فيه صفحات بعد. أضيفي صوراً من الكاميرا أو المعرض أو ملف PDF.',
+  pdfPagesTitle: 'كم صفحة تبين تدرسين من الملف؟',
+  studyThis: 'ادرسي هذه المادة',
+  reviewThis: 'راجعي هذه المادة',
+  deleteSubjectConfirm: 'سيتم حذف المادة وكل صفحاتها. متأكدة؟',
+  keywordsPlaceholder: 'اكتبي أهم الكلمات أو الفكرة بأسلوبك',
+  studyHint: 'اقرئي الصفحة بتركيز، ثم اكتبي كلماتك وسؤالاً تختبرين به نفسك في المراجعة.',
+  recallPrompt: 'حاولي تتذكرين محتوى الصفحة قبل ما تكشفينها',
+  noNotes: 'ما كتبتِ ملاحظات لهذه الصفحة. حاولي تتذكرين أهم ما فيها.',
+  reveal: 'اكشفي الصفحة',
+  nothingToReview: 'ما عندك مراجعات اليوم. ارجعي بكرة!',
+  notifDenied: 'لم يُسمح بالإشعارات. فعّليها من إعدادات الجوال.',
+  howItWorksBody:
+    'كل صفحة تدرسينها تُجدول لمراجعتها بعد 1 ثم 3 ثم 7 ثم 14 ثم 30 ثم 60 يوماً. إذا قلتِ "نسيت" ترجع الصفحة لأول الجدول، وإذا قلتِ "بصعوبة" تبقى في مكانها بمدة أقصر. كل بياناتك محفوظة على جوالك فقط.',
+  gamesHint: 'تلعبين بكلماتك أنتِ، فتثبت المعلومة وأنتِ مستمتعة.',
+  clozeDesc: 'كلمة مخفية من ملاحظاتك، اختاريها صح',
+  matchDesc: 'صِلي كل سؤال أو صورة بكلماتها',
+  clozePrompt: 'اختاري الكلمة الناقصة',
+  matchPrompt: 'اختاري من اليمين ثم ما يطابقه من اليسار',
+  matchPromptLtr: 'اختاري من اليسار ثم ما يطابقه من اليمين',
+  needMoreNotes: 'تحتاجين 3 صفحات مدروسة على الأقل فيها كلمات مفتاحية لتلعبي. ادرسي واكتبي ملاحظاتك أولاً!',
+  playAgain: 'العبي مرة ثانية',
+  encouragements: [
+    'يا {name}، ربع ساعة اليوم أفضل من ساعتين بكرة.',
+    'استمري يا {name}، كل مراجعة تثبّت المعلومة أكثر.',
+    'ذاكرتك تقوى كل يوم يا {name} 💪',
+    'خطوة صغيرة اليوم يا {name}، ونتيجة كبيرة في الاختبار.',
+    'أنتِ قدها يا {name}! ابدئي بصفحة واحدة بس.',
+    'يا {name}، الاستمرار يغلب الموهبة.',
+    'فخورين فيكِ يا {name}، كمّلي على نفس الوتيرة 🌟',
+  ],
+  praise: ['ممتازة يا {name}!', 'رائعة يا {name} 👏', 'أحسنتِ يا {name}!', 'كفو يا {name} 🌟'],
+};
+
+export type Gender = 'm' | 'f';
+
+export function getStrings(lang: Language, gender: Gender): Dict {
+  if (lang === 'en') return en;
+  return gender === 'f' ? arFemale : ar;
+}
+
 export type Strings = Dict;
 
-/** Fills {name}; drops it gracefully when the user has no name set. */
-export function withName(template: string, name: string, lang: Language): string {
-  if (name.trim()) return template.replaceAll('{name}', name.trim());
-  const fallback = lang === 'ar' ? 'بطل' : 'champ';
-  return template.replaceAll('{name}', fallback);
+/** Fills {name}; uses a friendly fallback when the user has no name set. */
+export function withName(template: string, name: string, s: Strings): string {
+  return template.replaceAll('{name}', name.trim() || s.fallbackName);
 }
 
 /** Picks a stable item for the day so the message does not flicker on every render. */

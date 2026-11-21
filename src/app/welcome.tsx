@@ -78,6 +78,29 @@ export default function Welcome() {
               />
             </Row>
           </View>
+          {settings.language === 'ar' ? (
+            <View style={{ gap: Spacing.two }}>
+              <Txt variant="caption" muted>
+                {s.iAm}
+              </Txt>
+              <Row gap={Spacing.two}>
+                <Button
+                  style={{ flex: 1 }}
+                  variant={settings.gender === 'm' ? 'primary' : 'ghost'}
+                  icon="🧑‍🎓"
+                  title={s.male}
+                  onPress={() => updateSettings({ gender: 'm' })}
+                />
+                <Button
+                  style={{ flex: 1 }}
+                  variant={settings.gender === 'f' ? 'primary' : 'ghost'}
+                  icon="👩‍🎓"
+                  title={s.female}
+                  onPress={() => updateSettings({ gender: 'f' })}
+                />
+              </Row>
+            </View>
+          ) : null}
           <Input
             label={s.askName}
             placeholder={s.namePlaceholder}

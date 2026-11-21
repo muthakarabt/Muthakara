@@ -43,6 +43,7 @@ export type Language = 'ar' | 'en';
 export type Settings = {
   name: string;
   language: Language;
+  gender: 'm' | 'f';
   onboarded: boolean;
   dailyMinutes: number;
   newPerDay: number;
@@ -55,6 +56,7 @@ export type Settings = {
 export const DEFAULT_SETTINGS: Settings = {
   name: '',
   language: 'ar',
+  gender: 'm',
   onboarded: false,
   dailyMinutes: 15,
   newPerDay: 3,
