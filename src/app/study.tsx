@@ -35,7 +35,7 @@ import {
 import { XP, makeRound, type SingleRound } from '@/lib/game';
 import { pickForDay, withName } from '@/lib/i18n';
 import { playSound } from '@/lib/sound';
-import { hasVoice, readAloud, stopReading } from '@/lib/speech';
+import { findVoice, readAloud, stopReading } from '@/lib/speech';
 import { todayStr } from '@/lib/srs';
 import { detectLanguage } from '@/lib/text';
 
@@ -176,15 +176,16 @@ function TextCard({
     if (phase !== 'listen') return;
     let alive = true;
     let stop = () => {};
-    hasVoice(lang).then((ok) => {
+    findVoice(lang).then((voice) => {
       if (!alive) return;
-      if (!ok) {
+      if (!voice) {
         setNoVoice(true);
         setPhase('look');
         return;
       }
       stop = readAloud(text, {
         repeats: settings.listenRepeats,
+        voice,
         onRepeat: (i) => alive && setRepeat(i),
         onDone: () => {
           if (alive) setPhase('look');
@@ -265,7 +266,7 @@ function TextCard({
           </Card>
           {noVoice ? (
             <Card tone="warning">
-              <Txt variant="caption">{s.noVoice}</Txt>
+              <Txt variant="caption">{s.noVoice(lang, Platform.OS)}</Txt>
             </Card>
           ) : null}
           {phase === 'listen' ? (

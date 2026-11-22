@@ -1,7 +1,7 @@
 import { Redirect, router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { GAME_ICONS } from '@/components/game-picker';
@@ -51,7 +51,7 @@ type HomeData = {
 
 export default function Home() {
   const db = useSQLiteContext();
-  const { settings, s } = useApp();
+  const { settings, s, updateSettings } = useApp();
   const d = useDirection();
   const c = useTheme();
   const [data, setData] = useState<HomeData | null>(null);
@@ -175,6 +175,36 @@ export default function Home() {
           </View>
         </GradientCard>
       </Animated.View>
+
+      {Platform.OS === 'web' && !settings.reminderPrompted ? (
+        <Card tone="accent">
+          <Row>
+            <IconBadge icon="notifications-outline" tone="accent" size={42} />
+            <View style={{ flex: 1 }}>
+              <Txt variant="heading">{s.reminderPromptTitle}</Txt>
+              <Txt variant="caption" muted>
+                {s.reminderPromptBody}
+              </Txt>
+            </View>
+            <IconButton
+              icon="close"
+              size={34}
+              label={s.cancel}
+              onPress={() => updateSettings({ reminderPrompted: true })}
+            />
+          </Row>
+          <Button
+            small
+            variant="accent"
+            icon="calendar-outline"
+            title={s.reminder}
+            onPress={() => {
+              updateSettings({ reminderPrompted: true });
+              router.push('/settings');
+            }}
+          />
+        </Card>
+      ) : null}
 
       {data && data.due === 0 && data.fresh === 0 && data.subjects.length > 0 ? (
         <Card tone="primary">

@@ -1,11 +1,14 @@
 import { useState } from 'react';
-import { Platform, Switch, View } from 'react-native';
+import { Linking, Platform, Switch, View } from 'react-native';
 
-import { Card, IconBadge, Input, Row, Screen, Section, Segmented, Stepper, Txt, notify } from '@/components/ui';
+import { Button, Card, IconBadge, Input, Row, Screen, Section, Segmented, Stepper, Txt, notify } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-context';
 import type { Profile } from '@/lib/db';
+import { buildIcs, downloadIcs, googleCalendarUrl } from '@/lib/calendar';
+import { pickForDay } from '@/lib/i18n';
+import { todayStr } from '@/lib/srs';
 import { scheduleDailyReminder } from '@/lib/reminders';
 
 export default function Settings() {
@@ -106,16 +109,13 @@ export default function Settings() {
 
       <Section title={s.reminder}>
         <Card>
-          {row(
-            s.reminder,
-            <Switch value={settings.reminderEnabled} onValueChange={toggleReminder} trackColor={{ true: c.primary }} />,
-          )}
-          {Platform.OS === 'web' ? (
-            <Txt variant="caption" muted>
-              {s.reminderWebNote}
-            </Txt>
-          ) : null}
-          {settings.reminderEnabled ? (
+          {Platform.OS !== 'web'
+            ? row(
+                s.reminder,
+                <Switch value={settings.reminderEnabled} onValueChange={toggleReminder} trackColor={{ true: c.primary }} />,
+              )
+            : null}
+          {Platform.OS === 'web' || settings.reminderEnabled ? (
             <View style={{ gap: Spacing.two }}>
               <Txt>{s.reminderTime}</Txt>
               {/* Clock time always reads hour:minute, left to right. */}
@@ -138,6 +138,44 @@ export default function Settings() {
                   onChange={(v) => updateSettings({ reminderMinute: v })}
                 />
               </View>
+            </View>
+          ) : null}
+          {Platform.OS === 'web' ? (
+            <View style={{ gap: Spacing.two }}>
+              <Txt variant="caption" muted>
+                {s.reminderWebNote}
+              </Txt>
+              <Button
+                variant="secondary"
+                icon="logo-google"
+                title={s.addToGoogleCalendar}
+                onPress={() =>
+                  Linking.openURL(
+                    googleCalendarUrl({
+                      hour: settings.reminderHour,
+                      minute: settings.reminderMinute,
+                      // no name in the link: it goes to Google
+                      title: s.reminderTitle(''),
+                      body: pickForDay(s.reminders, todayStr()),
+                    }),
+                  )
+                }
+              />
+              <Button
+                variant="ghost"
+                icon="calendar-outline"
+                title={s.downloadCalendar}
+                onPress={() =>
+                  downloadIcs(
+                    buildIcs({
+                      hour: settings.reminderHour,
+                      minute: settings.reminderMinute,
+                      title: s.reminderTitle(settings.name.trim()),
+                      bodies: s.reminders,
+                    }),
+                  )
+                }
+              />
             </View>
           ) : null}
         </Card>

@@ -4,13 +4,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform } from 'react-native';
 
 import { PageView } from '@/components/page-view';
-import { Button, Card, Input, Pill, Row, Screen, Section, Txt, confirmAction } from '@/components/ui';
+import { Button, Card, Input, Pill, Row, Screen, Section, Txt, confirmAction, notify } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useApp } from '@/lib/app-context';
 import { deletePage, getPage, resetPage, updatePageNotes, type PageWithSubject } from '@/lib/db';
 import { relativeDay } from '@/lib/i18n';
 import { deleteFiles } from '@/lib/media';
-import { readAloud } from '@/lib/speech';
+import { findVoice, readAloud } from '@/lib/speech';
 import { todayStr } from '@/lib/srs';
 import { detectLanguage } from '@/lib/text';
 
@@ -50,13 +50,19 @@ export default function PageScreen() {
     await load();
   };
 
-  const listen = () => {
+  const listen = async () => {
     if (speaking) {
       speaking();
       setSpeaking(null);
       return;
     }
-    const stop = readAloud(text.trim(), { repeats: 1, onDone: () => setSpeaking(null) });
+    const lang = detectLanguage(text);
+    const voice = await findVoice(lang);
+    if (!voice) {
+      notify(s.noVoice(lang, Platform.OS));
+      return;
+    }
+    const stop = readAloud(text.trim(), { repeats: 1, voice, onDone: () => setSpeaking(null) });
     setSpeaking(() => stop);
   };
 

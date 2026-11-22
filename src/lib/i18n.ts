@@ -157,7 +157,15 @@ function arabic(f: boolean, profile: Profile) {
     addText: 'إضافة النص',
     lookHint: g('اقرأها مرة أخيرة، بعدها نختبرك', 'اقرئيها مرة أخيرة، بعدها نختبرك'),
     readyForTest: g('جاهز', 'جاهزة'),
-    noVoice: 'ما لقينا صوت عربي في جهازك، فاقرأ النص بنفسك.',
+    noVoice: (lang: 'ar' | 'en', platform: string): string => {
+      const voice = lang === 'ar' ? 'عربي' : 'إنجليزي';
+      const read = g('اقرأ النص بنفسك', 'اقرئي النص بنفسك');
+      if (platform === 'android')
+        return `ما لقينا صوت ${voice} في جوالك. ${g('فعّله', 'فعّليه')} من: الإعدادات ← تحويل النص إلى كلام ← محرك Google ← تثبيت بيانات الصوت ← ${lang === 'ar' ? 'العربية' : 'English'}. وإلى ذاك الوقت ${read}.`;
+      if (platform === 'ios')
+        return `ما لقينا صوت ${voice} في جوالك. ${g('نزّله', 'نزّليه')} من: الإعدادات ← تسهيلات الاستخدام ← المحتوى المنطوق ← الأصوات ← ${lang === 'ar' ? 'العربية' : 'English'}. وإلى ذاك الوقت ${read}.`;
+      return `متصفحك ما فيه صوت ${voice}. ${g('جرّب', 'جرّبي')} متصفح Edge أو Safari، أو ${g('افتح', 'افتحي')} الموقع من الجوال. وإلى ذاك الوقت ${read}.`;
+    },
     keywords: 'كلمات مفتاحية / ملخص',
     keywordsPlaceholder: g('اكتب أهم الكلمات بأسلوبك', 'اكتبي أهم الكلمات بأسلوبك'),
     question: g('سؤال لنفسك', 'سؤال لنفسكِ'),
@@ -194,8 +202,8 @@ function arabic(f: boolean, profile: Profile) {
     readingProgress: (p: number) => `نقرأ النص… ${p}%`,
     ocrFailed: g('ما قدرنا نقرأ النص. اكتبه أو الصقه بنفسك، أو احفظها كصورة بس.', 'ما قدرنا نقرأ النص. اكتبيه أو الصقيه بنفسك، أو احفظيها كصورة بس.'),
     ocrUnavailable: g(
-      'قراءة النص من الصور متوفرة في نسخة الموقع. هنا الصق النص أو اكتبه، أو احفظها كصورة بس.',
-      'قراءة النص من الصور متوفرة في نسخة الموقع. هنا الصقي النص أو اكتبيه، أو احفظيها كصورة بس.',
+      'ما قدرنا نشغّل قراءة النص. تأكد إنك متصل بالإنترنت (أول مرة بس)، أو الصق النص واكتبه بنفسك.',
+      'ما قدرنا نشغّل قراءة النص. تأكدي إنك متصلة بالإنترنت (أول مرة بس)، أو الصقي النص واكتبيه بنفسك.',
     ),
     checkText: g('راجع النص وصحّح أي غلط قبل الحفظ', 'راجعي النص وصحّحي أي غلط قبل الحفظ'),
     textPlaceholder: g('الصق النص هنا أو اكتبه…', 'الصقي النص هنا أو اكتبيه…'),
@@ -226,7 +234,14 @@ function arabic(f: boolean, profile: Profile) {
     times: (n: number): string => (n === 1 ? 'مرة' : 'مرتين'),
     reminder: 'تنبيه يومي',
     reminderTime: 'وقت التنبيه',
-    reminderWebNote: 'التنبيهات تشتغل في تطبيق الجوال.',
+    reminderWebNote: g(
+      'المتصفح ما يقدر ينبّهك وهو مقفل، فأضف تذكير يومي لتقويمك بالوقت اللي فوق، ويوصلك تنبيه كل يوم بعبارة تشجيعية.',
+      'المتصفح ما يقدر ينبّهك وهو مقفل، فأضيفي تذكير يومي لتقويمك بالوقت اللي فوق، ويوصلك تنبيه كل يوم بعبارة تشجيعية.',
+    ),
+    addToGoogleCalendar: 'إضافة لتقويم Google',
+    reminderPromptTitle: g('خلّ التطبيق يذكّرك كل يوم', 'خلّي التطبيق يذكّرك كل يوم'),
+    reminderPromptBody: 'تنبيه واحد باليوم في الوقت اللي يناسبك، يوصلك عن طريق التقويم.',
+    downloadCalendar: 'تقويم الآيفون أو غيره (ملف)',
     notifDenied: g('الإشعارات مقفلة. فعّلها من إعدادات الجوال.', 'الإشعارات مقفلة. فعّليها من إعدادات الجوال.'),
     sound: 'أصوات الطبيعة',
     howItWorks: 'كيف يشتغل التطبيق؟',
@@ -429,7 +444,14 @@ function english(profile: Profile): Dict {
     addText: 'Add text',
     lookHint: "Read it one last time, then we'll test you",
     readyForTest: "I'm ready",
-    noVoice: "We couldn't find a voice for this language on your device, so read it yourself.",
+    noVoice: (lang, platform) => {
+      const name = lang === 'ar' ? 'Arabic' : 'English';
+      if (platform === 'android')
+        return `No ${name} voice on your phone. Turn it on in Settings → Text-to-speech → Google engine → Install voice data → ${name}. Until then, read the text yourself.`;
+      if (platform === 'ios')
+        return `No ${name} voice on your phone. Download one in Settings → Accessibility → Spoken Content → Voices → ${name}. Until then, read the text yourself.`;
+      return `Your browser has no ${name} voice. Try Edge or Safari, or open the site on your phone. Until then, read the text yourself.`;
+    },
     keywords: 'Keywords / summary',
     keywordsPlaceholder: 'The key words in your own words',
     question: 'A question for yourself',
@@ -461,7 +483,7 @@ function english(profile: Profile): Dict {
     reading: 'Reading the text from the photo…',
     readingProgress: (p) => `Reading the text… ${p}%`,
     ocrFailed: "We couldn't read the text. Type or paste it yourself, or save it as a photo only.",
-    ocrUnavailable: 'Reading text from photos is available in the web version. Here, paste or type the text, or save it as a photo only.',
+    ocrUnavailable: "We couldn't start text reading. Check your internet connection (needed the first time), or paste or type the text yourself.",
     checkText: 'Check the text and fix any mistakes before saving',
     textPlaceholder: 'Paste or type the text here…',
     partsPreview: (n) => `Will be split into ${n === 1 ? '1 part' : `${n} parts`}`,
@@ -489,7 +511,12 @@ function english(profile: Profile): Dict {
     times: (n) => (n === 1 ? 'Once' : 'Twice'),
     reminder: 'Daily reminder',
     reminderTime: 'Reminder time',
-    reminderWebNote: 'Reminders work in the phone app.',
+    reminderWebNote:
+      "Browsers can't alert you while the site is closed, so add a daily reminder to your calendar at the time above and you'll get an encouraging alert every day.",
+    addToGoogleCalendar: 'Add to Google Calendar',
+    reminderPromptTitle: 'Get a daily reminder',
+    reminderPromptBody: 'One alert a day at a time that suits you, through your calendar.',
+    downloadCalendar: 'iPhone or other calendar (file)',
     notifDenied: 'Notifications are off. Turn them on in your phone settings.',
     sound: 'Nature sounds',
     howItWorks: 'How does it work?',

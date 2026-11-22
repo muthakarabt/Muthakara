@@ -3,19 +3,17 @@
  * Tesseract. The engine and language files are served from /ocr (copied there
  * by scripts/copy-ocr-assets.js), so nothing is sent to any outside server.
  */
+import type { ReactNode } from 'react';
+
 type TesseractWorker = {
   recognize: (image: string) => Promise<{ data: { text: string } }>;
   terminate: () => Promise<void>;
 };
 type TesseractGlobal = {
-  createWorker: (
-    langs: string,
-    oem: number,
-    options: Record<string, unknown>,
-  ) => Promise<TesseractWorker>;
+  createWorker: (langs: string, oem: number, options: Record<string, unknown>) => Promise<TesseractWorker>;
 };
 
-export const ocrAvailable = true;
+export type OcrStatus = 'loading' | 'ready' | 'failed';
 
 let scriptPromise: Promise<TesseractGlobal> | null = null;
 let workerPromise: Promise<TesseractWorker> | null = null;
@@ -77,7 +75,7 @@ async function prepare(uri: string): Promise<string> {
 }
 
 /** Returns the recognised text; `onProgress` gets 0..1 while the page is read. */
-export async function recognizeText(uri: string, onProgress?: (p: number) => void): Promise<string> {
+async function recognize(uri: string, onProgress?: (p: number) => void): Promise<string> {
   const worker = await getWorker();
   progressListener = onProgress ?? null;
   try {
@@ -92,4 +90,13 @@ export async function recognizeText(uri: string, onProgress?: (p: number) => voi
   } finally {
     progressListener = null;
   }
+}
+
+/** Same shape as the phone version; on the web nothing extra needs rendering. */
+export function useOcr(): {
+  status: OcrStatus;
+  recognize: (uri: string, onProgress?: (p: number) => void) => Promise<string>;
+  element: ReactNode;
+} {
+  return { status: 'ready', recognize, element: null };
 }

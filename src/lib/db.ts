@@ -61,6 +61,8 @@ export type Settings = {
   reminderHour: number;
   reminderMinute: number;
   sound: boolean;
+  /** Web: the home screen already suggested adding the calendar reminder. */
+  reminderPrompted: boolean;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -76,6 +78,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reminderHour: 19,
   reminderMinute: 0,
   sound: true,
+  reminderPrompted: false,
 };
 
 const SCHEMA_VERSION = 2;

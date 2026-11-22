@@ -4,7 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { Modal, View } from 'react-native';
+import { Modal, Platform, View } from 'react-native';
 
 import { GAME_ICONS, GamePicker } from '@/components/game-picker';
 import { useRewards } from '@/components/rewards';
@@ -84,7 +84,12 @@ export default function SubjectScreen() {
       notify(s.cameraDenied);
       return;
     }
-    const res = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.85 });
+    const res = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.85,
+      // On phones, let the user crop to just the text: it makes reading the photo more accurate.
+      allowsEditing: Platform.OS !== 'web',
+    });
     if (!res.canceled) importImages(res.assets.map((a) => a.uri));
   };
 

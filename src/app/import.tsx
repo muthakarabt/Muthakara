@@ -13,7 +13,7 @@ import { useApp } from '@/lib/app-context';
 import { addPages, countPages, type NewPage } from '@/lib/db';
 import { clearPendingImages, getPendingImages } from '@/lib/import-queue';
 import { extensionOf, persistFile } from '@/lib/media';
-import { ocrAvailable, recognizeText } from '@/lib/ocr';
+import { useOcr } from '@/lib/ocr';
 import { cleanOcrText, detectLanguage, splitIntoParts } from '@/lib/text';
 
 type Ocr = { status: 'reading' | 'ready' | 'failed'; progress: number; text: string };
@@ -32,7 +32,8 @@ export default function ImportScreen() {
   const c = useTheme();
   const [uris] = useState(() => (mode === 'text' ? [] : getPendingImages(subjectId)));
   const [index, setIndex] = useState(0);
-  const [ocr, setOcr] = useState<Ocr>({ status: ocrAvailable ? 'reading' : 'failed', progress: 0, text: '' });
+  const engine = useOcr();
+  const [ocr, setOcr] = useState<Ocr>({ status: 'reading', progress: 0, text: '' });
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [added, setAdded] = useState(0);
@@ -41,22 +42,31 @@ export default function ImportScreen() {
   const uri = uris[index];
   const total = uris.length;
 
-  // Read the current photo's text.
+  // Read the current photo's text once the engine is ready.
+  const { status: engineStatus, recognize } = engine;
   useEffect(() => {
-    if (textMode || !uri || !ocrAvailable) return;
+    if (textMode || !uri || engineStatus !== 'ready') return;
     let alive = true;
-    recognizeText(uri, (p) => alive && setOcr((o) => ({ ...o, progress: p })))
+    recognize(uri, (p) => {
+      if (alive) setOcr((o) => ({ ...o, progress: p }));
+    })
       .then((raw) => {
         if (!alive) return;
         const clean = cleanOcrText(raw);
         setOcr({ status: clean ? 'ready' : 'failed', progress: 1, text: clean });
         setText(clean);
       })
-      .catch(() => alive && setOcr({ status: 'failed', progress: 0, text: '' }));
+      .catch(() => {
+        if (alive) setOcr({ status: 'failed', progress: 0, text: '' });
+      });
     return () => {
       alive = false;
     };
-  }, [uri, textMode]);
+  }, [uri, textMode, engineStatus, recognize]);
+
+  // The engine itself could not start (e.g. no internet on the phone).
+  const failed = ocr.status === 'failed' || (!textMode && engineStatus === 'failed');
+  const reading = !textMode && !failed && ocr.status === 'reading';
 
   const parts = splitIntoParts(text.trim());
   const finished = (count: number) => {
@@ -74,7 +84,7 @@ export default function ImportScreen() {
     setAdded(sum);
     setIndex(index + 1);
     setText('');
-    setOcr({ status: ocrAvailable ? 'reading' : 'failed', progress: 0, text: '' });
+    setOcr({ status: 'reading', progress: 0, text: '' });
   };
 
   const save = async (withText: boolean) => {
@@ -137,7 +147,8 @@ export default function ImportScreen() {
           </Animated.View>
         ) : null}
 
-        {!textMode && ocr.status === 'reading' ? (
+        {engine.element}
+        {reading ? (
           <Card>
             <Row>
               <ActivityIndicator color={c.primary} />
@@ -147,18 +158,18 @@ export default function ImportScreen() {
           </Card>
         ) : null}
 
-        {!textMode && ocr.status === 'failed' ? (
+        {!textMode && failed ? (
           <Card tone="warning">
             <Row align="flex-start">
               <Icon name="information-circle-outline" color={c.warning} />
               <Txt variant="caption" style={{ flex: 1 }}>
-                {ocrAvailable ? s.ocrFailed : s.ocrUnavailable}
+                {engineStatus === 'failed' ? s.ocrUnavailable : s.ocrFailed}
               </Txt>
             </Row>
           </Card>
         ) : null}
 
-        {textMode || ocr.status !== 'reading' ? (
+        {!reading ? (
           <View style={{ gap: Spacing.three }}>
             {ocr.status === 'ready' && !textMode ? (
               <Txt variant="caption" muted>
