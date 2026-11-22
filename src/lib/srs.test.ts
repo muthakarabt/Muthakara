@@ -43,3 +43,9 @@ test('hard keeps the stage and waits half the gap (at least one day)', () => {
   assert.deepEqual(afterReview(3, 'hard', '2026-11-21'), { stage: 3, due: '2026-11-28' });
   assert.deepEqual(afterReview(0, 'hard', '2026-11-21'), { stage: 0, due: '2026-11-22' });
 });
+
+test('parts the teacher stressed come back within a week', () => {
+  assert.equal(afterReview(4, 'good', '2026-01-01', true).due, '2026-01-08');
+  assert.equal(afterReview(4, 'good', '2026-01-01', true).stage, 5);
+  assert.equal(afterReview(0, 'good', '2026-01-01', true).due, '2026-01-04');
+});

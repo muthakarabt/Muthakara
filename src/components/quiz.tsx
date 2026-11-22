@@ -104,15 +104,31 @@ export function Quiz({
   }, [attempt, done, seconds]);
 
   const lang = detectLanguage(
-    round.type === 'order' ? round.answer.join(' ') : `${round.before} ${round.answer} ${round.after}`,
+    round.type === 'order'
+      ? round.answer.join(' ')
+      : round.type === 'choice' || round.type === 'truefalse'
+        ? `${round.prompt} ${round.answer}`
+        : `${round.before} ${round.answer} ${round.after}`,
   );
   const dir = lang === 'ar' ? 'rtl' : 'ltr';
+  const question = 'prompt' in round ? round.prompt : undefined;
+  const qDir = question && detectLanguage(question) === 'en' ? 'ltr' : 'rtl';
+  const wholeAnswer = round.type === 'type' && !round.before && !round.after;
+  const trueFalseOptions = [s.trueLabel, s.falseLabel];
+  const options =
+    round.type === 'cloze' || round.type === 'choice'
+      ? round.options
+      : round.type === 'truefalse'
+        ? trueFalseOptions
+        : null;
+  const rightOption =
+    round.type === 'truefalse' ? (round.isTrue ? s.trueLabel : s.falseLabel) : round.type === 'order' ? '' : round.answer;
 
   // ---------- checking ----------
   const checkCloze = (option: string) => {
-    if (done || round.type !== 'cloze') return;
+    if (done || !options) return;
     setPicked(option);
-    if (option === round.answer) grade('correct');
+    if (option === rightOption) grade('correct');
     else {
       setWrongPicks((w) => [...w, option]);
       grade('wrong');
@@ -129,7 +145,18 @@ export function Quiz({
     grade(score === 1 ? 'correct' : score >= 0.5 ? 'close' : 'wrong');
   };
 
-  const prompt = round.type === 'cloze' ? s.clozePrompt : round.type === 'type' ? s.typePrompt : s.orderPrompt;
+  const prompt =
+    round.type === 'cloze'
+      ? s.clozePrompt
+      : round.type === 'choice'
+        ? s.choicePrompt
+        : round.type === 'truefalse'
+          ? s.trueFalsePrompt
+          : round.type === 'type'
+            ? wholeAnswer
+              ? s.answerPrompt
+              : s.typePrompt
+            : s.orderPrompt;
   const blank = (filled?: string, ok?: boolean) => (
     <Text
       style={{
@@ -158,25 +185,42 @@ export function Quiz({
         <ProgressBar value={left / seconds} height={6} color={left <= 10 ? c.danger : c.primary} />
       </Card>
 
-      <Card>
-        {round.type === 'order' ? (
-          <OrderBoard round={round} placed={placed} setPlaced={setPlaced} locked={done} dir={dir} />
-        ) : (
-          <Txt variant="reading" dir={dir}>
-            {round.before}
-            {done || (round.type === 'cloze' && picked === round.answer)
-              ? blank(round.answer, feedback?.verdict === 'correct')
-              : blank()}
-            {round.after}
-          </Txt>
-        )}
-      </Card>
+      {question ? (
+        <Card tone="accent">
+          <Row align="flex-start">
+            <Icon name="help-circle-outline" size={24} color={c.accent} />
+            <Txt variant="heading" dir={qDir} style={{ flex: 1 }}>
+              {question}
+            </Txt>
+          </Row>
+        </Card>
+      ) : null}
 
-      {round.type === 'cloze' ? (
-        <View style={{ gap: Spacing.two }}>
-          {round.options.map((o) => {
+      {round.type === 'choice' || wholeAnswer ? null : (
+        <Card>
+          {round.type === 'order' ? (
+            <OrderBoard round={round} placed={placed} setPlaced={setPlaced} locked={done} dir={dir} />
+          ) : round.type === 'truefalse' ? (
+            <Txt variant="reading" dir={dir}>
+              {round.shown}
+            </Txt>
+          ) : (
+            <Txt variant="reading" dir={dir}>
+              {round.before}
+              {done || (round.type === 'cloze' && picked === round.answer)
+                ? blank(round.answer, feedback?.verdict === 'correct')
+                : blank()}
+              {round.after}
+            </Txt>
+          )}
+        </Card>
+      )}
+
+      {options ? (
+        <View style={{ gap: Spacing.two, flexDirection: round.type === 'truefalse' ? 'row' : 'column' }}>
+          {options.map((o) => {
             const isWrong = wrongPicks.includes(o);
-            const isRight = done && o === round.answer;
+            const isRight = done && o === rightOption;
             return (
               <Pressable
                 key={o}
@@ -184,6 +228,7 @@ export function Quiz({
                 disabled={done || isWrong}
                 onPress={() => checkCloze(o)}
                 style={({ pressed }) => ({
+                  flex: round.type === 'truefalse' ? 1 : undefined,
                   padding: Spacing.four,
                   borderRadius: Radius.medium,
                   borderWidth: 1.5,

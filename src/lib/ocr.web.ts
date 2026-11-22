@@ -6,7 +6,13 @@
  */
 import type { ReactNode } from 'react';
 
-type Pipeline = { recognize: (src: string, onProgress?: (p: number) => void) => Promise<string> };
+export type PdfText = { pages: string[]; total: number };
+export type PdfProgress = (done: number, page: number) => void;
+
+type Pipeline = {
+  recognize: (src: string, onProgress?: (p: number) => void) => Promise<string>;
+  readPdf: (src: string, onProgress?: PdfProgress) => Promise<PdfText>;
+};
 
 export type OcrStatus = 'loading' | 'ready' | 'failed';
 
@@ -43,11 +49,18 @@ async function recognize(uri: string, onProgress?: (p: number) => void): Promise
   return pipeline.recognize(uri, onProgress);
 }
 
+/** Reads the text of every page of a PDF (scanned pages are read like photos). */
+async function readPdf(uri: string, onProgress?: PdfProgress): Promise<PdfText> {
+  const pipeline = await getPipeline();
+  return pipeline.readPdf(uri, onProgress);
+}
+
 /** Same shape as the phone version; on the web nothing extra needs rendering. */
 export function useOcr(): {
   status: OcrStatus;
   recognize: (uri: string, onProgress?: (p: number) => void) => Promise<string>;
+  readPdf: (uri: string, onProgress?: PdfProgress) => Promise<PdfText>;
   element: ReactNode;
 } {
-  return { status: 'ready', recognize, element: null };
+  return { status: 'ready', recognize, readPdf, element: null };
 }

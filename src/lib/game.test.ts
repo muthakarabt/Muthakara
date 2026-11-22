@@ -5,8 +5,11 @@ import {
   ACHIEVEMENTS,
   candidateWords,
   levelFor,
+  makeChoice,
   makeCloze,
   makeMatch,
+  makeQaRound,
+  makeTrueFalse,
   makeOrderRound,
   makeRound,
   makeTypeRound,
@@ -95,4 +98,51 @@ test('achievements unlock from stats', () => {
   const stats = { xp: 900, studied: 12, reviews: 3, mastered: 0, games: 1, perfectGames: 0, streak: 3 };
   const unlocked = ACHIEVEMENTS.filter((a) => a.test(stats)).map((a) => a.id);
   assert.deepEqual(unlocked, ['first_page', 'ten_pages', 'streak3', 'first_game', 'level5']);
+});
+
+const qa = (id: number, question: string, answer: string) => ({ ...card(id, answer, { question }), qa: 1 });
+const Q1 = qa(11, 'وش وظيفة الميتوكوندريا؟', 'إنتاج الطاقة');
+const Q2 = qa(12, 'وين توجد المادة الوراثية؟', 'في النواة');
+const Q3 = qa(13, 'وش يسوي البلاستيد الأخضر؟', 'البناء الضوئي في الخلايا النباتية وتخزين النشا');
+
+test('question cards: multiple choice uses other cards\' answers', () => {
+  const r = makeChoice(Q1, [Q1, Q2, Q3], seeded(3));
+  assert.ok(r);
+  assert.equal(r.prompt, 'وش وظيفة الميتوكوندريا؟');
+  assert.equal(r.answer, 'إنتاج الطاقة');
+  assert.equal(r.options.length, 3);
+  assert.ok(r.options.includes('في النواة'));
+  assert.equal(makeChoice(Q1, [Q1], seeded(3)), null);
+});
+
+test('question cards: true/false shows the real answer or another one', () => {
+  const seen = new Set<boolean>();
+  for (let seed = 1; seed < 20; seed++) {
+    const r = makeTrueFalse(Q1, [Q1, Q2], seeded(seed));
+    assert.ok(r);
+    assert.equal(r.shown === 'إنتاج الطاقة', r.isTrue);
+    seen.add(r.isTrue);
+  }
+  assert.equal(seen.size, 2);
+});
+
+test('question cards get varied rounds and always carry the question', () => {
+  const types = new Set<string>();
+  for (let seed = 1; seed < 40; seed++) {
+    const r = makeRound(Q3, [Q1, Q2, Q3], 'mix', seeded(seed));
+    assert.ok(r);
+    assert.ok('prompt' in r && r.prompt === 'وش يسوي البلاستيد الأخضر؟');
+    types.add(r.type);
+  }
+  assert.ok(types.size >= 4, [...types].join(','));
+  // A lone card with a short answer can still be asked.
+  const lone = makeQaRound(Q1, [Q1], 'mix', seeded(1));
+  assert.ok(lone);
+});
+
+test('match pairs a question with its answer', () => {
+  const r = makeMatch([Q1, Q2], 4, seeded(1));
+  assert.ok(r);
+  assert.ok(r.prompts.some((p) => p.text === 'وش وظيفة الميتوكوندريا؟'));
+  assert.ok(r.answers.some((p) => p.text === 'إنتاج الطاقة'));
 });

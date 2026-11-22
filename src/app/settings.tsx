@@ -6,6 +6,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-context';
 import type { Profile } from '@/lib/db';
+import { AI_KEY_URL } from '@/lib/ai';
 import { buildIcs, downloadIcs, googleCalendarUrl } from '@/lib/calendar';
 import { pickForDay } from '@/lib/i18n';
 import { todayStr } from '@/lib/srs';
@@ -15,6 +16,7 @@ export default function Settings() {
   const { settings, updateSettings, s } = useApp();
   const c = useTheme();
   const [name, setName] = useState(settings.name);
+  const [aiKey, setAiKey] = useState(settings.aiKey);
 
   const toggleReminder = async (enabled: boolean) => {
     if (enabled && Platform.OS !== 'web') {
@@ -187,6 +189,48 @@ export default function Settings() {
           <Switch value={settings.sound} onValueChange={(v) => updateSettings({ sound: v })} trackColor={{ true: c.primary }} />,
         )}
       </Card>
+
+      <Section title={s.aiSettingsTitle}>
+        <Card>
+          <Row align="flex-start">
+            <IconBadge icon="sparkles-outline" size={36} tone="accent" />
+            <Txt variant="caption" muted style={{ flex: 1 }}>
+              {s.aiSettingsBody}
+            </Txt>
+          </Row>
+          <Input
+            label={s.aiKeyLabel}
+            value={aiKey}
+            onChangeText={setAiKey}
+            autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry
+            dir="ltr"
+            placeholder="AIza…"
+          />
+          <Row gap={Spacing.two}>
+            <Button
+              style={{ flex: 1 }}
+              small
+              icon="checkmark"
+              title={s.save}
+              disabled={aiKey.trim() === settings.aiKey}
+              onPress={async () => {
+                await updateSettings({ aiKey: aiKey.trim() });
+                notify(s.aiKeySaved);
+              }}
+            />
+            <Button
+              style={{ flex: 1 }}
+              small
+              variant="secondary"
+              icon="open-outline"
+              title={s.aiGetKey}
+              onPress={() => Linking.openURL(AI_KEY_URL)}
+            />
+          </Row>
+        </Card>
+      </Section>
 
       <Section title={s.howItWorks}>
         <Card tone="primary">

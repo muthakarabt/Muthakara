@@ -34,6 +34,10 @@ export type Page = {
   text: string;
   keywords: string;
   question: string;
+  /** 1 = a question card: `question` is asked and `text` is its answer. */
+  qa: number;
+  /** 1 = the teacher stressed this part: studied first and reviewed more often. */
+  important: number;
   stage: number;
   due: string | null;
   studied_on: string | null;
@@ -63,6 +67,8 @@ export type Settings = {
   sound: boolean;
   /** Web: the home screen already suggested adding the calendar reminder. */
   reminderPrompted: boolean;
+  /** The user's own free Google AI Studio key for smarter questions (optional, stays on the device). */
+  aiKey: string;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -79,9 +85,10 @@ export const DEFAULT_SETTINGS: Settings = {
   reminderMinute: 0,
   sound: true,
   reminderPrompted: false,
+  aiKey: '',
 };
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {
   await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
@@ -135,6 +142,12 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
     await db.execAsync(`
       ALTER TABLE subjects ADD COLUMN game TEXT NOT NULL DEFAULT 'mix';
       ALTER TABLE pages ADD COLUMN text TEXT NOT NULL DEFAULT '';
+    `);
+  }
+  if (version < 3) {
+    await db.execAsync(`
+      ALTER TABLE pages ADD COLUMN qa INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE pages ADD COLUMN important INTEGER NOT NULL DEFAULT 0;
     `);
   }
   await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
@@ -206,7 +219,16 @@ export async function deleteSubject(db: SQLiteDatabase, id: number): Promise<str
 
 // ---------- pages ----------
 
-export type NewPage = { kind: PageKind; uri: string; label: string; text?: string };
+export type NewPage = {
+  kind: PageKind;
+  uri: string;
+  label: string;
+  text?: string;
+  /** For question cards. */
+  question?: string;
+  qa?: boolean;
+  important?: boolean;
+};
 
 export async function addPages(db: SQLiteDatabase, subjectId: number, pages: NewPage[]): Promise<void> {
   if (pages.length === 0) return;
@@ -219,13 +241,16 @@ export async function addPages(db: SQLiteDatabase, subjectId: number, pages: New
   await db.withTransactionAsync(async () => {
     for (const p of pages) {
       await db.runAsync(
-        'INSERT INTO pages (subject_id, kind, uri, label, position, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO pages (subject_id, kind, uri, label, position, text, question, qa, important, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         subjectId,
         p.kind,
         p.uri,
         p.label,
         position++,
         p.text ?? '',
+        p.question ?? '',
+        p.qa ? 1 : 0,
+        p.important ? 1 : 0,
         now,
       );
     }
@@ -281,6 +306,10 @@ export async function deletePage(db: SQLiteDatabase, id: number): Promise<string
   return (others?.n ?? 0) === 0 ? page.uri : null;
 }
 
+export async function setPageImportant(db: SQLiteDatabase, id: number, important: boolean): Promise<void> {
+  await db.runAsync('UPDATE pages SET important = ? WHERE id = ?', important ? 1 : 0, id);
+}
+
 export async function resetPage(db: SQLiteDatabase, id: number): Promise<void> {
   await db.runAsync(
     'UPDATE pages SET stage = 0, due = NULL, studied_on = NULL, last_reviewed = NULL, reviews = 0, lapses = 0 WHERE id = ?',
@@ -307,7 +336,7 @@ export async function nextNewPages(
   return db.getAllAsync<PageWithSubject>(
     `SELECT p.*, s.title AS subject_title, s.game AS subject_game FROM pages p JOIN subjects s ON s.id = p.subject_id
      WHERE p.studied_on IS NULL ${where}
-     ORDER BY s.created_at, p.position LIMIT ?`,
+     ORDER BY s.created_at, p.important DESC, p.position LIMIT ?`,
     ...params,
   );
 }
@@ -323,7 +352,7 @@ export async function duePages(db: SQLiteDatabase, today = todayStr(), subjectId
   return db.getAllAsync<PageWithSubject>(
     `SELECT p.*, s.title AS subject_title, s.game AS subject_game FROM pages p JOIN subjects s ON s.id = p.subject_id
      WHERE p.due IS NOT NULL AND p.due <= ? ${where}
-     ORDER BY p.due, s.created_at, p.position`,
+     ORDER BY p.due, p.important DESC, s.created_at, p.position`,
     ...params,
   );
 }
@@ -334,7 +363,7 @@ export async function markStudied(db: SQLiteDatabase, id: number, today = todayS
 }
 
 export async function recordReview(db: SQLiteDatabase, page: Page, grade: Grade, today = todayStr()): Promise<void> {
-  const s = afterReview(page.stage, grade, today);
+  const s = afterReview(page.stage, grade, today, page.important === 1);
   await db.runAsync(
     `UPDATE pages SET stage = ?, due = ?, last_reviewed = ?, reviews = reviews + 1,
        lapses = lapses + ? WHERE id = ?`,

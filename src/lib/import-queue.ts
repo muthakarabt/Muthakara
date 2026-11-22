@@ -15,3 +15,16 @@ export function getPendingImages(subjectId: number): string[] {
 export function clearPendingImages(): void {
   pending = null;
 }
+
+/** A picked PDF waiting for the whole-file screen. */
+let pendingFile: { subjectId: number; uri: string; name: string } | null = null;
+
+export function setPendingFile(subjectId: number, file: { uri: string; name: string }): void {
+  pendingFile = { subjectId, ...file };
+}
+
+export function takePendingFile(subjectId: number): { uri: string; name: string } | null {
+  const f = pendingFile && pendingFile.subjectId === subjectId ? pendingFile : null;
+  pendingFile = null;
+  return f;
+}

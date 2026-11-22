@@ -41,8 +41,18 @@ export function afterStudy(today: string): Schedule {
   return { stage: 0, due: addDays(today, INTERVALS[0]) };
 }
 
+/** Parts the teacher stressed never wait longer than this between reviews. */
+export const IMPORTANT_MAX_GAP = 7;
+
 /** Schedule for a page after a review with the given self-grade. */
-export function afterReview(stage: number, grade: Grade, today: string): Schedule {
+export function afterReview(stage: number, grade: Grade, today: string, important = false): Schedule {
+  const s = plainReview(stage, grade, today);
+  if (!important) return s;
+  const cap = addDays(today, IMPORTANT_MAX_GAP);
+  return s.due > cap ? { stage: s.stage, due: cap } : s;
+}
+
+function plainReview(stage: number, grade: Grade, today: string): Schedule {
   const current = Math.min(Math.max(stage, 0), LAST_STAGE);
   if (grade === 'again') {
     return { stage: 0, due: addDays(today, INTERVALS[0]) };

@@ -30,6 +30,18 @@
             },
           );
         };
+        window.__pdf = function (msg) {
+          MuthakaraOCR.readPdf(msg.data, function (p, page) {
+            send({ type: 'progress', id: msg.id, progress: p, page: page });
+          }).then(
+            function (r) {
+              send({ type: 'pdf', id: msg.id, pages: r.pages, total: r.total });
+            },
+            function (e) {
+              send({ type: 'error', id: msg.id, error: String(e && e.message ? e.message : e) });
+            },
+          );
+        };
         // Warm up the engine and Arabic language file so the first photo is quick.
         MuthakaraOCR.warmUp().then(
           function () {

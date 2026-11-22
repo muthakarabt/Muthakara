@@ -155,7 +155,7 @@ function FlipReview({ page, onGrade }: { page: PageWithSubject; onGrade: (g: Gra
   const c = useTheme();
   const [revealed, setRevealed] = useState(false);
   const today = todayStr();
-  const preview = (g: Grade) => relativeDay(afterReview(page.stage, g, today).due, today, s);
+  const preview = (g: Grade) => relativeDay(afterReview(page.stage, g, today, page.important === 1).due, today, s);
   const hasQuestion = page.question.trim().length > 0;
 
   const choose = (g: Grade) => {
