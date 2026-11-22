@@ -8,11 +8,12 @@
   EXPO_NO_TELEMETRY = "1"
 
 # expo-sqlite runs in the browser through SharedArrayBuffer, which needs
-# cross-origin isolation.
+# cross-origin isolation. "require-corp" (not "credentialless") because Safari on
+# iPhone only supports require-corp; everything the app loads is same-origin.
 [[headers]]
   for = "/*"
   [headers.values]
-    Cross-Origin-Embedder-Policy = "credentialless"
+    Cross-Origin-Embedder-Policy = "require-corp"
     Cross-Origin-Opener-Policy = "same-origin"
 
 # Single-page app: let the client router handle every path.
@@ -20,3 +21,9 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# The OCR engine and language files rarely change; let browsers keep them.
+[[headers]]
+  for = "/ocr/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"

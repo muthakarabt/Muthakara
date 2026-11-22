@@ -4,14 +4,15 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInUp, FadeOutUp, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Radius, Spacing } from '@/constants/theme';
+import { Icon, type IconName } from '@/components/ui';
+import { Font, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-context';
 import { addXp, getStats, type XpReason } from '@/lib/db';
 import { ACHIEVEMENTS, levelFor } from '@/lib/game';
 import { playSound } from '@/lib/sound';
 
-type Toast = { id: number; icon: string; title: string; subtitle?: string; big?: boolean };
+type Toast = { id: number; icon: IconName; title: string; subtitle?: string; big?: boolean };
 
 type RewardsValue = {
   /** Adds points, then announces any level-up or newly unlocked achievement. */
@@ -45,11 +46,11 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
       const unlocked = ACHIEVEMENTS.filter((a) => a.test(after) && !a.test(before));
       if (lvAfter > lvBefore) {
         playSound('levelup');
-        toast({ icon: '⭐', title: s.levelUp(lvAfter), big: true });
+        toast({ icon: 'star', title: s.levelUp(lvAfter), big: true });
       }
       for (const a of unlocked) {
         if (lvAfter === lvBefore) playSound('levelup');
-        toast({ icon: a.icon, title: s.newAchievement, subtitle: s.achievementNames[a.id], big: true });
+        toast({ icon: a.icon as IconName, title: s.newAchievement, subtitle: s.achievementNames[a.id], big: true });
       }
     },
     [db, s, toast],
@@ -67,14 +68,16 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
             style={[
               styles.toast,
               t.big && styles.big,
-              { backgroundColor: c.card, borderColor: c.primary, shadowColor: '#000' },
+              { backgroundColor: c.cardSolid, borderColor: c.accent, shadowColor: '#000' },
             ]}>
-            <Animated.Text entering={ZoomIn.delay(120)} style={{ fontSize: t.big ? 34 : 22 }}>
-              {t.icon}
-            </Animated.Text>
+            <Animated.View
+              entering={ZoomIn.delay(120)}
+              style={[styles.badge, { backgroundColor: c.accentSoft, width: t.big ? 48 : 36, height: t.big ? 48 : 36 }]}>
+              <Icon name={t.icon} size={t.big ? 26 : 20} color={c.accent} />
+            </Animated.View>
             <View style={{ flexShrink: 1 }}>
-              <Text style={{ color: c.text, fontWeight: '800', fontSize: t.big ? 17 : 15 }}>{t.title}</Text>
-              {t.subtitle ? <Text style={{ color: c.textSecondary, fontSize: 14 }}>{t.subtitle}</Text> : null}
+              <Text style={{ color: c.text, fontFamily: Font.bold, fontSize: t.big ? 17 : 15 }}>{t.title}</Text>
+              {t.subtitle ? <Text style={{ color: c.textSecondary, fontSize: 14, fontFamily: Font.regular }}>{t.subtitle}</Text> : null}
             </View>
           </Animated.View>
         ))}
@@ -106,4 +109,5 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   big: { paddingVertical: Spacing.four },
+  badge: { borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
 });

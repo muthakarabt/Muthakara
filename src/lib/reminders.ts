@@ -13,14 +13,17 @@ Notifications.setNotificationHandler({
 
 const CHANNEL_ID = 'daily-reminder';
 
-/** Returns false when the user did not allow notifications. */
+/**
+ * Schedules one reminder a day at the chosen time, with a different encouraging
+ * message for each weekday. Returns false when the user did not allow notifications.
+ */
 export async function scheduleDailyReminder(opts: {
   hour: number;
   minute: number;
   title: string;
-  body: string;
+  bodies: string[];
 }): Promise<boolean> {
-  if (Platform.OS === 'web') return false;
+  if (Platform.OS === 'web' || !opts.bodies.length) return false;
   const current = await Notifications.getPermissionsAsync();
   let granted = current.granted;
   if (!granted && current.canAskAgain) {
@@ -35,15 +38,18 @@ export async function scheduleDailyReminder(opts: {
     });
   }
   await Notifications.cancelAllScheduledNotificationsAsync();
-  await Notifications.scheduleNotificationAsync({
-    content: { title: opts.title, body: opts.body },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour: opts.hour,
-      minute: opts.minute,
-      channelId: CHANNEL_ID,
-    },
-  });
+  for (let weekday = 1; weekday <= 7; weekday++) {
+    await Notifications.scheduleNotificationAsync({
+      content: { title: opts.title, body: opts.bodies[(weekday - 1) % opts.bodies.length] },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+        weekday,
+        hour: opts.hour,
+        minute: opts.minute,
+        channelId: CHANNEL_ID,
+      },
+    });
+  }
   return true;
 }
 

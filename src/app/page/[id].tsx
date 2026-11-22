@@ -1,16 +1,18 @@
-import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { KeyboardAvoidingView, Platform } from 'react-native';
 
 import { PageView } from '@/components/page-view';
-import { Button, Card, Input, Pill, Row, Screen, Section, Txt } from '@/components/ui';
+import { Button, Card, Input, Pill, Row, Screen, Section, Txt, confirmAction, notify } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useApp } from '@/lib/app-context';
 import { deletePage, getPage, resetPage, updatePageNotes, type PageWithSubject } from '@/lib/db';
 import { relativeDay } from '@/lib/i18n';
 import { deleteFiles } from '@/lib/media';
+import { findVoice, readAloud } from '@/lib/speech';
 import { todayStr } from '@/lib/srs';
+import { detectLanguage } from '@/lib/text';
 
 export default function PageScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -18,13 +20,16 @@ export default function PageScreen() {
   const db = useSQLiteContext();
   const { s } = useApp();
   const [page, setPage] = useState<PageWithSubject | null>(null);
+  const [text, setText] = useState('');
   const [keywords, setKeywords] = useState('');
   const [question, setQuestion] = useState('');
   const [saved, setSaved] = useState(false);
+  const [speaking, setSpeaking] = useState<null | (() => void)>(null);
 
   const load = useCallback(async () => {
     const p = await getPage(db, pageId);
     setPage(p);
+    setText(p?.text ?? '');
     setKeywords(p?.keywords ?? '');
     setQuestion(p?.question ?? '');
   }, [db, pageId]);
@@ -35,48 +40,53 @@ export default function PageScreen() {
     }, [load]),
   );
 
+  // Stop reading when leaving the screen.
+  useEffect(() => () => speaking?.(), [speaking]);
+
   const save = async () => {
-    await updatePageNotes(db, pageId, { keywords: keywords.trim(), question: question.trim() });
+    await updatePageNotes(db, pageId, { text: text.trim(), keywords: keywords.trim(), question: question.trim() });
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
     await load();
   };
 
-  const reset = () =>
-    Alert.alert(s.resetProgress, '', [
-      { text: s.cancel, style: 'cancel' },
-      {
-        text: s.resetProgress,
-        onPress: async () => {
-          await resetPage(db, pageId);
-          await load();
-        },
-      },
-    ]);
+  const listen = async () => {
+    if (speaking) {
+      speaking();
+      setSpeaking(null);
+      return;
+    }
+    const lang = detectLanguage(text);
+    const voice = await findVoice(lang);
+    if (!voice) {
+      notify(s.noVoice(lang, Platform.OS));
+      return;
+    }
+    const stop = readAloud(text.trim(), { repeats: 1, voice, onDone: () => setSpeaking(null) });
+    setSpeaking(() => stop);
+  };
 
-  const remove = () =>
-    Alert.alert(s.deletePage, s.deletePageConfirm, [
-      { text: s.cancel, style: 'cancel' },
-      {
-        text: s.delete,
-        style: 'destructive',
-        onPress: async () => {
-          const orphan = await deletePage(db, pageId);
-          deleteFiles([orphan]);
-          router.back();
-        },
-      },
-    ]);
+  const reset = async () => {
+    const ok = await confirmAction({ title: s.resetProgress, message: '', ok: s.resetProgress, cancel: s.cancel });
+    if (!ok) return;
+    await resetPage(db, pageId);
+    await load();
+  };
 
-  if (!page) return <Screen>{null}</Screen>;
+  const remove = async () => {
+    const ok = await confirmAction({ title: s.deletePage, message: s.deletePageConfirm, ok: s.delete, cancel: s.cancel });
+    if (!ok) return;
+    deleteFiles([await deletePage(db, pageId)]);
+    router.back();
+  };
+
+  if (!page) return <Screen title="">{null}</Screen>;
   const today = todayStr();
+  const dir = detectLanguage(text) === 'ar' ? 'rtl' : 'ltr';
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Screen>
-        <Stack.Screen options={{ title: page.label }} />
-        <PageView page={page} />
-
+      <Screen title={page.label}>
         <Card>
           <Row style={{ justifyContent: 'space-between' }}>
             <Txt variant="caption" muted>
@@ -93,17 +103,48 @@ export default function PageScreen() {
           </Txt>
         </Card>
 
+        <Section
+          title={s.passage}
+          action={
+            text.trim() ? (
+              <Button
+                small
+                variant="secondary"
+                icon={speaking ? 'stop' : 'volume-high-outline'}
+                title={speaking ? s.stopListening : s.listen}
+                onPress={listen}
+              />
+            ) : null
+          }>
+          {!text.trim() ? (
+            <Txt variant="caption" muted>
+              {s.addTextHint}
+            </Txt>
+          ) : null}
+          <Input
+            value={text}
+            onChangeText={setText}
+            placeholder={s.textPlaceholder}
+            multiline
+            dir={text ? dir : undefined}
+            style={{ fontSize: 17, minHeight: 140 }}
+          />
+        </Section>
+
+        {page.uri ? <PageView page={page} height={320} /> : null}
+
         <Section title={s.keywords}>
           <Input placeholder={s.keywordsPlaceholder} value={keywords} onChangeText={setKeywords} multiline />
           <Input label={s.question} placeholder={s.questionPlaceholder} value={question} onChangeText={setQuestion} />
-          <Button icon={saved ? '✓' : '💾'} title={saved ? s.saved : s.save} onPress={save} />
         </Section>
+
+        <Button icon={saved ? 'checkmark-done' : 'save-outline'} title={saved ? s.saved : s.save} onPress={save} />
 
         <Row gap={Spacing.two}>
           {page.studied_on ? (
-            <Button style={{ flex: 1 }} small variant="ghost" icon="↺" title={s.resetProgress} onPress={reset} />
+            <Button style={{ flex: 1 }} small variant="ghost" icon="refresh" title={s.resetProgress} onPress={reset} />
           ) : null}
-          <Button style={{ flex: 1 }} small variant="danger" icon="🗑️" title={s.deletePage} onPress={remove} />
+          <Button style={{ flex: 1 }} small variant="danger" icon="trash-outline" title={s.deletePage} onPress={remove} />
         </Row>
       </Screen>
     </KeyboardAvoidingView>
