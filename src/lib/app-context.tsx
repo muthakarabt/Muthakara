@@ -2,6 +2,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { I18nManager } from 'react-native';
 
+import { newDeviceId } from '@/lib/cloud-ai';
 import { DEFAULT_SETTINGS, getSettings, saveSettings, type Settings } from '@/lib/db';
 import { getStrings, type Strings } from '@/lib/i18n';
 import { cancelReminders, scheduleDailyReminder } from '@/lib/reminders';
@@ -24,7 +25,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     getSettings(db)
-      .then(setSettings)
+      .then(async (stored) => {
+        if (!stored.deviceId) {
+          stored = { ...stored, deviceId: newDeviceId() };
+          await saveSettings(db, { deviceId: stored.deviceId }).catch(() => {});
+        }
+        setSettings(stored);
+      })
       .finally(() => setReady(true));
   }, [db]);
 

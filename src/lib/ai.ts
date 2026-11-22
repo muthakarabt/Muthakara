@@ -11,7 +11,7 @@ export const AI_KEY_URL = 'https://aistudio.google.com/apikey';
 // Newest first; older names are tried if Google retires or renames one.
 const MODELS = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.0-flash'];
 
-export type AiErrorKind = 'key' | 'limit' | 'network' | 'other';
+export type AiErrorKind = 'key' | 'limit' | 'credit' | 'network' | 'other';
 
 export class AiError extends Error {
   kind: AiErrorKind;

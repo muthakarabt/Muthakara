@@ -10,6 +10,8 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { AiError, generateQuestions, type AiQuestion } from '@/lib/ai';
 import { useApp } from '@/lib/app-context';
+import { isClaudeKey, writeQuestions } from '@/lib/claude';
+import { cloudQuestions } from '@/lib/cloud-ai';
 import { addPages, listPages, type Page } from '@/lib/db';
 import { detectLanguage } from '@/lib/text';
 
@@ -37,14 +39,15 @@ function chunks(pages: Page[], size = 2500): string[] {
 }
 
 /**
- * Optional: writes question cards from the subject's passages with the user's
- * own Gemini key. The user picks which to keep and stars what the teacher stressed.
+ * Writes question cards from the subject's passages with the built-in AI (or
+ * the user's own Claude/Gemini key). The user picks which to keep and stars what the teacher stressed.
  */
 export default function AiQuestionsScreen() {
   const { subject } = useLocalSearchParams<{ subject: string }>();
   const subjectId = Number(subject);
   const db = useSQLiteContext();
   const { s, settings } = useApp();
+  const canAi = !!settings.aiKey || settings.aiCloud;
   const { toast } = useRewards();
   const c = useTheme();
   const [passages, setPassages] = useState<Page[] | null>(null);
@@ -66,7 +69,12 @@ export default function AiQuestionsScreen() {
         const text = groups[i];
         const words = text.split(/\s+/).length;
         const count = Math.max(3, Math.min(8, Math.round(words / 45)));
-        const found = await generateQuestions(settings.aiKey, text, detectLanguage(text), count);
+        const lang = detectLanguage(text);
+        const found = isClaudeKey(settings.aiKey)
+          ? await writeQuestions(settings.aiKey, settings.aiModel, text, lang, count)
+          : settings.aiKey
+            ? await generateQuestions(settings.aiKey, text, lang, count)
+            : await cloudQuestions(settings.deviceId, text, lang, count);
         setItems((prev) => [...prev, ...found.map((q) => ({ ...q, include: true, important: false }))]);
         setState({ step: 'working', done: i + 1, total: groups.length });
       }
@@ -74,7 +82,15 @@ export default function AiQuestionsScreen() {
     } catch (e) {
       const kind = e instanceof AiError ? e.kind : 'other';
       const message =
-        kind === 'key' ? s.aiErrorKey : kind === 'limit' ? s.aiErrorLimit : kind === 'network' ? s.aiErrorNetwork : s.aiErrorOther;
+        kind === 'key'
+          ? s.aiErrorKey
+          : kind === 'limit'
+            ? s.aiErrorLimit
+            : kind === 'credit'
+              ? s.aiErrorCredit
+              : kind === 'network'
+                ? s.aiErrorNetwork
+                : s.aiErrorOther;
       // Keep whatever came back before the error.
       setState({ step: 'error', message });
     }
@@ -114,7 +130,7 @@ export default function AiQuestionsScreen() {
 
   return (
     <Screen title={s.aiTitle}>
-      {!settings.aiKey ? (
+      {!canAi ? (
         <Card tone="accent">
           <Txt>{s.aiNoKey}</Txt>
           <Button icon="settings-outline" title={s.settings} onPress={() => router.replace('/settings')} />
@@ -125,7 +141,7 @@ export default function AiQuestionsScreen() {
         </Card>
       ) : null}
 
-      {settings.aiKey && passages?.length && state.step === 'intro' ? (
+      {canAi && passages?.length && state.step === 'intro' ? (
         <Card>
           <Row align="flex-start">
             <Icon name="sparkles" color={c.accent} />

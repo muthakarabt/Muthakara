@@ -10,7 +10,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-context';
 import { addPages, countPages } from '@/lib/db';
-import { useOcr } from '@/lib/ocr';
+import { useReader } from '@/lib/reader';
 import { cleanOcrText, detectLanguage } from '@/lib/text';
 
 type Field = 'question' | 'answer';
@@ -26,7 +26,7 @@ export default function QuestionScreen() {
   const { s } = useApp();
   const { toast } = useRewards();
   const c = useTheme();
-  const engine = useOcr();
+  const engine = useReader();
   const [values, setValues] = useState<Record<Field, string>>({ question: '', answer: '' });
   const [important, setImportant] = useState(false);
   const [pending, setPending] = useState<{ field: Field; uri: string } | null>(null);

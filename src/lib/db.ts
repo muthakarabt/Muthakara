@@ -1,5 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import type { ClaudeModel } from '@/lib/claude';
 import { addDays, afterReview, afterStudy, todayStr, type Grade } from '@/lib/srs';
 
 export const DATABASE_NAME = 'muthakara.db';
@@ -67,8 +68,14 @@ export type Settings = {
   sound: boolean;
   /** Web: the home screen already suggested adding the calendar reminder. */
   reminderPrompted: boolean;
-  /** The user's own free Google AI Studio key for smarter questions (optional, stays on the device). */
+  /** Use the app's built-in AI (Claude) to read photos and write questions. */
+  aiCloud: boolean;
+  /** Random id for the built-in AI's daily allowance; not linked to the person. */
+  deviceId: string;
+  /** Optional: the user's own Claude or Google key instead of the built-in AI (stays on the device). */
   aiKey: string;
+  /** Which Claude model reads photos and writes questions when the key is an Anthropic one. */
+  aiModel: ClaudeModel;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -85,7 +92,10 @@ export const DEFAULT_SETTINGS: Settings = {
   reminderMinute: 0,
   sound: true,
   reminderPrompted: false,
+  aiCloud: true,
+  deviceId: '',
   aiKey: '',
+  aiModel: 'claude-opus-5-5',
 };
 
 const SCHEMA_VERSION = 3;
