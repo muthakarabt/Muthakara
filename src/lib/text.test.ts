@@ -45,3 +45,8 @@ test('judge does not accept a whole paragraph for a short answer', () => {
   assert.equal(judge(paragraph, answer), 'wrong');
   assert.equal(judge('المستهلكين', answer), 'correct');
 });
+
+test('cleanOcrText drops stray symbols and speck lines that OCR invents', () => {
+  const raw = '| ~\nالطلب هو الكمية | المطلوبة » ؛\n_ .\nعند السعر 5 + 3 = 8 .';
+  assert.equal(cleanOcrText(raw), 'الطلب هو الكمية المطلوبة؛ عند السعر 5 + 3 = 8.');
+});

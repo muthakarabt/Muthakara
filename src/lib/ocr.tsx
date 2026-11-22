@@ -54,7 +54,7 @@ export function useOcr(): {
   const recognize = useCallback(async (uri: string, onProgress?: (p: number) => void) => {
     // Phone photos are large; a 2000px-wide JPEG keeps the text sharp and the transfer small.
     const ref = await ImageManipulator.manipulate(uri).resize({ width: 2000 }).renderAsync();
-    const saved = await ref.saveAsync({ base64: true, compress: 0.85, format: SaveFormat.JPEG });
+    const saved = await ref.saveAsync({ base64: true, compress: 0.92, format: SaveFormat.JPEG });
     const id = nextId.current++;
     return new Promise<string>((resolve, reject) => {
       pending.current.set(id, { resolve, reject, onProgress });
