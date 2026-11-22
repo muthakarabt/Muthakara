@@ -20,6 +20,7 @@ import {
   Row,
   Screen,
   Section,
+  Stepper,
   Txt,
   confirmAction,
   notify,
@@ -33,6 +34,7 @@ import {
   getSubject,
   listPages,
   renameSubject,
+  setSubjectExam,
   setSubjectGame,
   type GameType,
   type Page,
@@ -41,7 +43,7 @@ import {
 import { relativeDay } from '@/lib/i18n';
 import { setPendingFile, setPendingImages } from '@/lib/import-queue';
 import { deleteFiles } from '@/lib/media';
-import { todayStr } from '@/lib/srs';
+import { addDays, daysToExam, todayStr } from '@/lib/srs';
 import { detectLanguage } from '@/lib/text';
 
 export default function SubjectScreen() {
@@ -189,6 +191,16 @@ export default function SubjectScreen() {
         />
       </GradientCard>
 
+      <ExamCard
+        examDate={subject?.exam_date ?? ''}
+        hasPages={pages.length > 0}
+        onChange={async (date) => {
+          await setSubjectExam(db, subjectId, date);
+          setSubject((sub) => (sub ? { ...sub, exam_date: date } : sub));
+        }}
+        onCram={() => router.push(`/review?subject=${subjectId}&exam=1`)}
+      />
+
       <Section title={s.addContent}>
         <Row wrap gap={Spacing.two} align="stretch">
           {addButtons.map((b) => (
@@ -288,5 +300,68 @@ export default function SubjectScreen() {
       <Button variant="danger" icon="trash-outline" title={s.deleteSubject} onPress={remove} />
 
     </Screen>
+  );
+}
+
+/** The subject's exam day: once set, reviews come back before it and an exam cram is offered. */
+function ExamCard({
+  examDate,
+  hasPages,
+  onChange,
+  onCram,
+}: {
+  examDate: string;
+  hasPages: boolean;
+  onChange: (date: string) => void;
+  onCram: () => void;
+}) {
+  const { s } = useApp();
+  const c = useTheme();
+  const today = todayStr();
+  const left = daysToExam(examDate, today);
+
+  if (left === null) {
+    return (
+      <Card>
+        <Row align="flex-start">
+          <IconBadge icon="calendar-outline" tone="accent" size={40} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Txt bold>{s.examTitle}</Txt>
+            <Txt variant="caption" muted>
+              {s.examNone}
+            </Txt>
+          </View>
+        </Row>
+        <Button small variant="secondary" icon="calendar" title={s.examSet} onPress={() => onChange(addDays(today, 7))} />
+      </Card>
+    );
+  }
+
+  return (
+    <Card tone="accent">
+      <Row>
+        <Icon name="calendar" color={c.accent} />
+        <Txt variant="heading" style={{ flex: 1 }}>
+          {s.examLeft(left)}
+        </Txt>
+      </Row>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <Txt variant="caption" muted>
+          {s.examInDays}
+        </Txt>
+        <Stepper
+          value={left}
+          min={0}
+          max={180}
+          format={(v) => (v === 0 ? s.today : s.daysCount(v))}
+          onChange={(v) => onChange(addDays(today, v))}
+        />
+      </Row>
+      <Button variant="accent" icon="flash" title={s.examCram} disabled={!hasPages} onPress={onCram} />
+      <Txt variant="caption" muted>
+        {s.examCramHint}
+      </Txt>
+      <Button small variant="ghost" icon="close" title={s.examClear} onPress={() => onChange('')} />
+    </Card>
   );
 }

@@ -15,6 +15,8 @@ export type Subject = {
   id: number;
   title: string;
   game: GameType;
+  /** The exam day (YYYY-MM-DD), or '' when none is set. */
+  exam_date: string;
   created_at: string;
 };
 
@@ -48,7 +50,7 @@ export type Page = {
   created_at: string;
 };
 
-export type PageWithSubject = Page & { subject_title: string; subject_game: GameType };
+export type PageWithSubject = Page & { subject_title: string; subject_game: GameType; subject_exam?: string };
 
 export type Language = 'ar' | 'en';
 
@@ -98,7 +100,7 @@ export const DEFAULT_SETTINGS: Settings = {
   aiModel: 'claude-opus-5-5',
 };
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {
   await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
@@ -160,6 +162,9 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
       ALTER TABLE pages ADD COLUMN important INTEGER NOT NULL DEFAULT 0;
     `);
   }
+  if (version < 4) {
+    await db.execAsync(`ALTER TABLE subjects ADD COLUMN exam_date TEXT NOT NULL DEFAULT '';`);
+  }
   await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
 
@@ -215,6 +220,32 @@ export async function renameSubject(db: SQLiteDatabase, id: number, title: strin
 
 export async function setSubjectGame(db: SQLiteDatabase, id: number, game: GameType): Promise<void> {
   await db.runAsync('UPDATE subjects SET game = ? WHERE id = ?', game, id);
+}
+
+export async function setSubjectExam(db: SQLiteDatabase, id: number, examDate: string): Promise<void> {
+  await db.runAsync('UPDATE subjects SET exam_date = ? WHERE id = ?', examDate, id);
+}
+
+/** Subjects with an exam today or later, soonest first. */
+export async function upcomingExams(db: SQLiteDatabase, today = todayStr()): Promise<Subject[]> {
+  return db.getAllAsync<Subject>(
+    "SELECT * FROM subjects WHERE exam_date != '' AND exam_date >= ? ORDER BY exam_date",
+    today,
+  );
+}
+
+/**
+ * Everything in a subject for an exam cram: the parts the teacher stressed
+ * first, then the ones forgotten most or learned least, new parts last.
+ */
+export async function examPages(db: SQLiteDatabase, subjectId: number): Promise<PageWithSubject[]> {
+  return db.getAllAsync<PageWithSubject>(
+    `SELECT p.*, s.title AS subject_title, s.game AS subject_game, s.exam_date AS subject_exam
+     FROM pages p JOIN subjects s ON s.id = p.subject_id
+     WHERE p.subject_id = ?
+     ORDER BY p.important DESC, (p.studied_on IS NULL), p.lapses DESC, p.stage, p.position`,
+    subjectId,
+  );
 }
 
 export async function deleteSubject(db: SQLiteDatabase, id: number): Promise<string[]> {
@@ -360,7 +391,8 @@ export async function duePages(db: SQLiteDatabase, today = todayStr(), subjectId
   const where = subjectId ? 'AND p.subject_id = ?' : '';
   const params: (number | string)[] = subjectId ? [today, subjectId] : [today];
   return db.getAllAsync<PageWithSubject>(
-    `SELECT p.*, s.title AS subject_title, s.game AS subject_game FROM pages p JOIN subjects s ON s.id = p.subject_id
+    `SELECT p.*, s.title AS subject_title, s.game AS subject_game, s.exam_date AS subject_exam
+     FROM pages p JOIN subjects s ON s.id = p.subject_id
      WHERE p.due IS NOT NULL AND p.due <= ? ${where}
      ORDER BY p.due, p.important DESC, s.created_at, p.position`,
     ...params,
@@ -373,14 +405,16 @@ export async function markStudied(db: SQLiteDatabase, id: number, today = todayS
 }
 
 export async function recordReview(db: SQLiteDatabase, page: Page, grade: Grade, today = todayStr()): Promise<void> {
-  const s = afterReview(page.stage, grade, today, page.important === 1);
+  const sub = await db.getFirstAsync<{ exam_date: string }>('SELECT exam_date FROM subjects WHERE id = ?', page.subject_id);
+  const s = afterReview(page.stage, grade, today, page.important === 1, sub?.exam_date);
   await db.runAsync(
     `UPDATE pages SET stage = ?, due = ?, last_reviewed = ?, reviews = reviews + 1,
-       lapses = lapses + ? WHERE id = ?`,
+       lapses = lapses + ?, studied_on = COALESCE(studied_on, ?) WHERE id = ?`,
     s.stage,
     s.due,
     today,
     grade === 'again' ? 1 : 0,
+    today,
     page.id,
   );
 }

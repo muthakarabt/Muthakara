@@ -31,13 +31,15 @@ import {
   getStats,
   listSubjects,
   studySecondsToday,
+  upcomingExams,
   upcomingReviews,
   type Stats,
+  type Subject,
   type SubjectSummary,
 } from '@/lib/db';
 import { ACHIEVEMENTS, levelFor } from '@/lib/game';
 import { formatDate, pickForDay, withName } from '@/lib/i18n';
-import { todayStr } from '@/lib/srs';
+import { daysToExam, todayStr } from '@/lib/srs';
 
 type HomeData = {
   subjects: SubjectSummary[];
@@ -47,6 +49,7 @@ type HomeData = {
   minutesToday: number;
   stats: Stats;
   upcoming: { due: string; n: number }[];
+  exams: Subject[];
 };
 
 export default function Home() {
@@ -61,7 +64,7 @@ export default function Home() {
       let alive = true;
       (async () => {
         const today = todayStr();
-        const [subjects, due, fresh, pool, seconds, stats, upcoming] = await Promise.all([
+        const [subjects, due, fresh, pool, seconds, stats, upcoming, exams] = await Promise.all([
           listSubjects(db, today),
           duePages(db, today),
           countNewPages(db),
@@ -69,6 +72,7 @@ export default function Home() {
           studySecondsToday(db, today),
           getStats(db, today),
           upcomingReviews(db, today, 7),
+          upcomingExams(db, today),
         ]);
         if (!alive) return;
         setData({
@@ -79,6 +83,8 @@ export default function Home() {
           minutesToday: Math.floor(seconds / 60),
           stats,
           upcoming,
+          // Only exams in the next two weeks are worth a banner.
+          exams: exams.filter((e) => (daysToExam(e.exam_date, today) ?? 99) <= 14),
         });
       })();
       return () => {
@@ -205,6 +211,24 @@ export default function Home() {
           />
         </Card>
       ) : null}
+
+      {data?.exams.slice(0, 2).map((ex) => {
+        const left = daysToExam(ex.exam_date, today) ?? 0;
+        return (
+          <Card key={ex.id} tone="accent" onPress={() => router.push(`/review?subject=${ex.id}&exam=1`)}>
+            <Row>
+              <IconBadge icon="flash" tone="accent" size={44} />
+              <View style={{ flex: 1 }}>
+                <Txt variant="heading">{s.examHome(ex.title, left)}</Txt>
+                <Txt variant="caption" muted>
+                  {s.examCram}
+                </Txt>
+              </View>
+              <Icon name={d.rtl ? 'chevron-back' : 'chevron-forward'} color={c.accent} />
+            </Row>
+          </Card>
+        );
+      })}
 
       {data && data.due === 0 && data.fresh === 0 && data.subjects.length > 0 ? (
         <Card tone="primary">

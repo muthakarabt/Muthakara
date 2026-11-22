@@ -6,6 +6,7 @@ import Animated, { FlipInEasyY, ZoomIn } from 'react-native-reanimated';
 
 import { GoalClock, useStudyClock } from '@/components/goal-clock';
 import { PageView } from '@/components/page-view';
+import { BreakScreen, useBreaks } from '@/components/break-time';
 import { Quiz, gradeFor, type QuizOutcome } from '@/components/quiz';
 import { useRewards } from '@/components/rewards';
 import {
@@ -25,15 +26,19 @@ import {
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-context';
-import { duePages, recordReview, type PageWithSubject } from '@/lib/db';
+import { duePages, examPages, recordReview, type PageWithSubject } from '@/lib/db';
 import { XP, makeRound, type SingleRound } from '@/lib/game';
 import { pickForDay, relativeDay, withName } from '@/lib/i18n';
 import { playSound } from '@/lib/sound';
 import { afterReview, todayStr, type Grade } from '@/lib/srs';
 
 export default function Review() {
-  const { subject } = useLocalSearchParams<{ subject?: string }>();
+  const { subject, exam } = useLocalSearchParams<{ subject?: string; exam?: string }>();
   const subjectId = subject ? Number(subject) : undefined;
+  // Exam cram: the whole subject, whatever is due, with breaks.
+  const cram = exam === '1' && !!subjectId;
+  const breaks = useBreaks(cram);
+  const [round, setRound] = useState(1);
   const db = useSQLiteContext();
   const { s, settings } = useApp();
   const { award, toast } = useRewards();
@@ -47,13 +52,16 @@ export default function Review() {
 
   useEffect(() => {
     let alive = true;
-    duePages(db, todayStr(), subjectId).then((list) => {
-      if (alive) setQueue(list);
+    (cram ? examPages(db, subjectId!) : duePages(db, todayStr(), subjectId)).then((list) => {
+      if (alive) {
+        setQueue(list);
+        setIndex(0);
+      }
     });
     return () => {
       alive = false;
     };
-  }, [db, subjectId]);
+  }, [db, subjectId, cram, round]);
 
   const page = queue?.[index];
   const today = todayStr();
@@ -74,14 +82,17 @@ export default function Review() {
     await award(g === 'good' ? XP.reviewGood : g === 'hard' ? XP.reviewHard : XP.reviewAgain, 'review');
     if (queue && index + 1 >= queue.length && g !== 'again') playSound('complete');
     setIndex((i) => i + 1);
+    breaks.check();
   };
 
-  if (!queue) return <Screen title={s.reviewSession}>{null}</Screen>;
+  const title = cram ? s.examSession : s.reviewSession;
+  if (!queue) return <Screen title={title}>{null}</Screen>;
+  if (breaks.onBreak) return <BreakScreen onDone={breaks.resume} />;
 
   if (!page) {
     const total = tally.good + tally.hard + tally.again;
     return (
-      <Screen title={s.reviewSession} contentStyle={{ flexGrow: 1, justifyContent: 'center' }}>
+      <Screen title={title} contentStyle={{ flexGrow: 1, justifyContent: 'center' }}>
         {total > 0 ? (
           <Animated.View entering={ZoomIn.springify()}>
             <GradientCard style={{ alignItems: 'center' }}>
@@ -90,7 +101,7 @@ export default function Review() {
                 {withName(pickForDay(s.praise, today, total), settings.name)}
               </Txt>
               <Txt color="#ffffffdd" center>
-                {s.reviewDone}
+                {cram ? s.examRoundDone : s.reviewDone}
               </Txt>
               <Txt color="#ffffffdd" center variant="caption">
                 {s.reviewSummary(tally.good, tally.hard, tally.again)}
@@ -101,6 +112,9 @@ export default function Review() {
           <Empty icon="sunny-outline" tone="accent" text={s.nothingToReview} />
         )}
         <GoalClock seconds={seconds} goal={settings.dailyMinutes * 60} />
+        {cram && total > 0 ? (
+          <Button icon="refresh" title={s.examAgain} onPress={() => setRound((r) => r + 1)} />
+        ) : null}
         <Button variant="secondary" icon="game-controller-outline" title={s.play} onPress={() => router.replace('/games')} />
         <Button title={s.backHome} icon="home-outline" onPress={() => router.back()} />
       </Screen>
@@ -108,8 +122,13 @@ export default function Review() {
   }
 
   return (
-    <Screen title={`${s.reviewSession} · ${s.of(index + 1, queue.length)}`}>
+    <Screen title={`${title} · ${s.of(index + 1, queue.length)}`}>
       <ProgressBar value={index / queue.length} color={c.accent} />
+      {cram ? (
+        <Txt variant="caption" muted center>
+          {s.nextBreak(breaks.minutesLeft())}
+        </Txt>
+      ) : null}
       <Row style={{ justifyContent: 'space-between' }}>
         <Txt variant="heading" style={{ flex: 1 }} numberOfLines={1}>
           {page.subject_title}
@@ -155,7 +174,8 @@ function FlipReview({ page, onGrade }: { page: PageWithSubject; onGrade: (g: Gra
   const c = useTheme();
   const [revealed, setRevealed] = useState(false);
   const today = todayStr();
-  const preview = (g: Grade) => relativeDay(afterReview(page.stage, g, today, page.important === 1).due, today, s);
+  const preview = (g: Grade) =>
+    relativeDay(afterReview(page.stage, g, today, page.important === 1, page.subject_exam).due, today, s);
   const hasQuestion = page.question.trim().length > 0;
 
   const choose = (g: Grade) => {

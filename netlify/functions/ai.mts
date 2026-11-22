@@ -14,7 +14,7 @@
  *   ANTHROPIC_API_KEY   the key from console.anthropic.com
  *   ADMIN_TOKEN         a password of your choice for the usage page
  *   AI_MODEL            default claude-haiku-5-5
- *   AI_DEVICE_DAILY     requests per device per day, default 2000
+ *   AI_DEVICE_DAILY     requests per device per day, default 500
  *   AI_IP_DAILY         requests per internet address per day, default 5000
  *   AI_TOTAL_DAILY      requests for the whole app per day, default none
  */
@@ -112,7 +112,7 @@ export default async (req: Request): Promise<Response> => {
     [`${day}/total`, num('AI_TOTAL_DAILY', 0)],
     [`${day}/${body.action}`, 0],
     [`${day}/ip/${ip}`, num('AI_IP_DAILY', 5000)],
-    [`${day}/device/${device}`, num('AI_DEVICE_DAILY', 2000)],
+    [`${day}/device/${device}`, num('AI_DEVICE_DAILY', 500)],
   ]);
   if (!allowed) return reply(429, { error: 'limit' });
 
