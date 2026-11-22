@@ -1,10 +1,10 @@
 import { Image } from 'expo-image';
 import * as Sharing from 'expo-sharing';
 import { useState } from 'react';
-import { Linking, Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Linking, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Button, Txt } from '@/components/ui';
+import { Button, Icon, Txt } from '@/components/ui';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-context';
@@ -40,14 +40,14 @@ export function PageView({ page, height = 420 }: { page: Pick<Page, 'kind' | 'ur
           alignItems: 'center',
           gap: Spacing.three,
         }}>
-        <Text style={{ fontSize: 56 }}>📄</Text>
+        <Icon name="document-text-outline" size={52} color={c.primary} />
         <Txt variant="title" center>
           {page.label}
         </Txt>
         <Txt muted center>
           {s.openFileHint(page.label)}
         </Txt>
-        <Button icon="📂" title={s.openFile} onPress={() => openPdf(page.uri)} />
+        <Button icon="open-outline" title={s.openFile} onPress={() => openPdf(page.uri)} />
       </View>
     );
   }
@@ -57,7 +57,7 @@ export function PageView({ page, height = 420 }: { page: Pick<Page, 'kind' | 'ur
       <Pressable onPress={() => setFull(true)}>
         <Image
           source={{ uri: page.uri }}
-          style={{ width: '100%', height, borderRadius: Radius.large, backgroundColor: c.card }}
+          style={{ width: '100%', height, borderRadius: Radius.large, backgroundColor: c.cardSolid }}
           contentFit="contain"
           transition={200}
         />
@@ -71,7 +71,7 @@ export function PageView({ page, height = 420 }: { page: Pick<Page, 'kind' | 'ur
             paddingHorizontal: 10,
             paddingVertical: 4,
           }}>
-          <Text style={{ color: '#fff', fontSize: 12 }}>🔍</Text>
+          <Icon name="expand-outline" size={16} color="#fff" />
         </View>
       </Pressable>
       <Modal visible={full} animationType="fade" onRequestClose={() => setFull(false)} supportedOrientations={['portrait', 'landscape']}>
@@ -97,7 +97,7 @@ export function PageView({ page, height = 420 }: { page: Pick<Page, 'kind' | 'ur
               alignItems: 'center',
               justifyContent: 'center',
             }}>
-            <Text style={{ color: '#fff', fontSize: 20 }}>✕</Text>
+            <Icon name="close" size={24} color="#fff" />
           </Pressable>
         </SafeAreaView>
       </Modal>

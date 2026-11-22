@@ -20,3 +20,9 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# The OCR engine and language files rarely change; let browsers keep them.
+[[headers]]
+  for = "/ocr/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"

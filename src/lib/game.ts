@@ -5,6 +5,7 @@
 
 export const XP = {
   study: 10,
+  testCorrect: 5,
   reviewGood: 8,
   reviewHard: 5,
   reviewAgain: 2,
@@ -45,18 +46,18 @@ export type StatsLike = {
 };
 
 export const ACHIEVEMENTS: { id: AchievementId; icon: string; test: (s: StatsLike) => boolean }[] = [
-  { id: 'first_page', icon: '🌱', test: (s) => s.studied >= 1 },
-  { id: 'ten_pages', icon: '📘', test: (s) => s.studied >= 10 },
-  { id: 'fifty_pages', icon: '📚', test: (s) => s.studied >= 50 },
-  { id: 'streak3', icon: '🔥', test: (s) => s.streak >= 3 },
-  { id: 'streak7', icon: '⚡', test: (s) => s.streak >= 7 },
-  { id: 'streak30', icon: '🏆', test: (s) => s.streak >= 30 },
-  { id: 'reviews25', icon: '🔁', test: (s) => s.reviews >= 25 },
-  { id: 'reviews100', icon: '🧠', test: (s) => s.reviews >= 100 },
-  { id: 'first_game', icon: '🎮', test: (s) => s.games >= 1 },
-  { id: 'perfect_game', icon: '🎯', test: (s) => s.perfectGames >= 1 },
-  { id: 'mastered10', icon: '💎', test: (s) => s.mastered >= 10 },
-  { id: 'level5', icon: '👑', test: (s) => levelFor(s.xp).level >= 5 },
+  { id: 'first_page', icon: 'leaf-outline', test: (s) => s.studied >= 1 },
+  { id: 'ten_pages', icon: 'book-outline', test: (s) => s.studied >= 10 },
+  { id: 'fifty_pages', icon: 'library-outline', test: (s) => s.studied >= 50 },
+  { id: 'streak3', icon: 'flame-outline', test: (s) => s.streak >= 3 },
+  { id: 'streak7', icon: 'flash-outline', test: (s) => s.streak >= 7 },
+  { id: 'streak30', icon: 'trophy-outline', test: (s) => s.streak >= 30 },
+  { id: 'reviews25', icon: 'repeat-outline', test: (s) => s.reviews >= 25 },
+  { id: 'reviews100', icon: 'bulb-outline', test: (s) => s.reviews >= 100 },
+  { id: 'first_game', icon: 'game-controller-outline', test: (s) => s.games >= 1 },
+  { id: 'perfect_game', icon: 'locate-outline', test: (s) => s.perfectGames >= 1 },
+  { id: 'mastered10', icon: 'diamond-outline', test: (s) => s.mastered >= 10 },
+  { id: 'level5', icon: 'ribbon-outline', test: (s) => levelFor(s.xp).level >= 5 },
 ];
 
 // ---------- randomness ----------
@@ -83,24 +84,29 @@ export function seeded(seed: number): Rng {
   };
 }
 
-// ---------- fill-the-gap puzzle ----------
+// ---------- puzzles ----------
 
-export type NotePage = { id: number; keywords: string; question: string; label: string; subject_title: string };
-
-export type ClozeRound = {
-  pageId: number;
-  subject: string;
-  before: string;
-  after: string;
-  answer: string;
-  options: string[];
+/** Anything that can be played: its passage, or the user's own notes when there is no passage. */
+export type PlayCard = {
+  id: number;
+  text: string;
+  keywords: string;
+  question: string;
+  label: string;
+  subject_title: string;
+  kind: 'image' | 'pdf' | 'text';
+  uri: string;
 };
+
+export function passageOf(card: Pick<PlayCard, 'text' | 'keywords'>): string {
+  return (card.text.trim() || card.keywords.trim()).replace(/\s+/g, ' ');
+}
 
 const WORD = /[\p{L}\p{N}][\p{L}\p{N}\p{M}'’-]*/gu;
 // Very common words make poor blanks.
 const STOP = new Set([
-  'في', 'من', 'على', 'إلى', 'الى', 'عن', 'مع', 'هو', 'هي', 'ثم', 'أو', 'او', 'التي', 'الذي', 'هذا', 'هذه', 'كان', 'أن', 'ان', 'لا', 'ما', 'كل',
-  'the', 'and', 'for', 'with', 'that', 'this', 'from', 'are', 'was', 'into', 'its', 'has', 'have', 'not', 'but', 'you', 'your',
+  'في', 'من', 'على', 'إلى', 'الى', 'عن', 'مع', 'هو', 'هي', 'ثم', 'أو', 'او', 'التي', 'الذي', 'هذا', 'هذه', 'كان', 'أن', 'ان', 'لا', 'ما', 'كل', 'قد', 'لقد', 'وهو', 'وهي', 'ذلك', 'تلك', 'بين', 'عند', 'حتى', 'إذا', 'اذا',
+  'the', 'and', 'for', 'with', 'that', 'this', 'from', 'are', 'was', 'into', 'its', 'has', 'have', 'not', 'but', 'you', 'your', 'they', 'their', 'which', 'were', 'been', 'will', 'can',
 ]);
 
 export function candidateWords(text: string): { word: string; index: number }[] {
@@ -113,22 +119,34 @@ export function candidateWords(text: string): { word: string; index: number }[] 
   return out;
 }
 
-/**
- * Hides one meaningful word from a page's notes and offers it among words
- * taken from the user's other notes, so every option is plausible.
- */
-export function makeCloze(page: NotePage, pool: readonly NotePage[], rng: Rng = Math.random): ClozeRound | null {
-  const text = page.keywords.trim();
+function pickKeyWord(candidates: { word: string; index: number }[], rng: Rng) {
+  // Longer words tend to be the key terms; pick among the top three.
+  const ranked = shuffle(candidates, rng).sort((a, b) => [...b.word].length - [...a.word].length);
+  return ranked[Math.floor(rng() * Math.min(3, ranked.length))];
+}
+
+// Fill the gap (multiple choice)
+
+export type ClozeRound = {
+  type: 'cloze';
+  cardId: number;
+  subject: string;
+  before: string;
+  after: string;
+  answer: string;
+  options: string[];
+};
+
+export function makeCloze(card: PlayCard, pool: readonly PlayCard[], rng: Rng = Math.random): ClozeRound | null {
+  const text = passageOf(card);
   const candidates = candidateWords(text);
   if (candidates.length < 2) return null; // a single word leaves no context to recall from
-  // Prefer longer words: they tend to be the key terms.
-  const ranked = shuffle(candidates, rng).sort((a, b) => [...b.word].length - [...a.word].length);
-  const pick = ranked[Math.floor(rng() * Math.min(3, ranked.length))];
+  const pick = pickKeyWord(candidates, rng);
 
   const seen = new Set([pick.word.toLowerCase()]);
   const distractors: string[] = [];
   const others = shuffle(
-    pool.filter((p) => p.id !== page.id).flatMap((p) => candidateWords(p.keywords).map((c) => c.word)),
+    pool.filter((p) => p.id !== card.id).flatMap((p) => candidateWords(passageOf(p)).map((c) => c.word)),
     rng,
   );
   const sameText = shuffle(candidates.map((c) => c.word), rng);
@@ -139,11 +157,12 @@ export function makeCloze(page: NotePage, pool: readonly NotePage[], rng: Rng = 
     seen.add(key);
     distractors.push(w);
   }
-  if (distractors.length < 2) return null;
+  if (distractors.length < 1) return null;
 
   return {
-    pageId: page.id,
-    subject: page.subject_title,
+    type: 'cloze',
+    cardId: card.id,
+    subject: card.subject_title,
     before: text.slice(0, pick.index),
     after: text.slice(pick.index + pick.word.length),
     answer: pick.word,
@@ -151,19 +170,81 @@ export function makeCloze(page: NotePage, pool: readonly NotePage[], rng: Rng = 
   };
 }
 
-export function makeClozeRounds(pool: readonly NotePage[], count: number, rng: Rng = Math.random): ClozeRound[] {
-  const rounds: ClozeRound[] = [];
-  for (const page of shuffle(pool, rng)) {
-    if (rounds.length >= count) break;
-    const r = makeCloze(page, pool, rng);
-    if (r) rounds.push(r);
-  }
-  return rounds;
+// Write it from memory (typed answer)
+
+export type TypeRound = {
+  type: 'type';
+  cardId: number;
+  subject: string;
+  before: string;
+  after: string;
+  answer: string;
+};
+
+/** Hides a short phrase (1–3 words starting at a key word) for the user to type. */
+export function makeTypeRound(card: PlayCard, rng: Rng = Math.random): TypeRound | null {
+  const text = passageOf(card);
+  const candidates = candidateWords(text);
+  if (candidates.length < 2) return null;
+  const pick = pickKeyWord(candidates, rng);
+  // Extend the blank to the following word(s) when the passage is long enough to keep context.
+  const all = [...text.matchAll(/\S+/g)].map((m) => ({ word: m[0], index: m.index ?? 0 }));
+  const start = all.findIndex((w) => w.index >= pick.index);
+  const extra = all.length >= 12 ? Math.floor(rng() * 3) : 0; // 0–2 extra words
+  const end = Math.min(all.length - 1, start + extra);
+  const from = all[start].index;
+  const lastWord = all[end].word.replace(/[.,،؛;:!?؟]+$/u, '');
+  const to = all[end].index + lastWord.length;
+  return {
+    type: 'type',
+    cardId: card.id,
+    subject: card.subject_title,
+    before: text.slice(0, from),
+    after: text.slice(to),
+    answer: text.slice(from, to),
+  };
 }
 
-// ---------- match-the-pairs puzzle ----------
+// Put the words in order
 
-export type MatchPage = NotePage & { kind: 'image' | 'pdf'; uri: string };
+export type OrderRound = {
+  type: 'order';
+  cardId: number;
+  subject: string;
+  /** The words in the right order. */
+  answer: string[];
+  /** Indexes into `answer`, shuffled. */
+  shuffled: number[];
+};
+
+export function makeOrderRound(card: PlayCard, rng: Rng = Math.random, maxWords = 9): OrderRound | null {
+  const all = passageOf(card).split(/\s+/).filter(Boolean);
+  if (all.length < 3) return null;
+  let start = 0;
+  if (all.length > maxWords) {
+    // Prefer starting right after a sentence end so the piece makes sense on its own.
+    const starts = [0, ...all.flatMap((w, i) => (/[.!?؟؛]$/u.test(w) && i + 1 < all.length - 2 ? [i + 1] : []))].filter(
+      (i) => i <= all.length - 3,
+    );
+    start = starts[Math.floor(rng() * starts.length)];
+  }
+  const answer = all.slice(start, start + maxWords);
+  let shuffled = shuffle(
+    answer.map((_, i) => i),
+    rng,
+  );
+  // Never hand over the answer already solved.
+  if (shuffled.every((v, i) => v === i)) shuffled = [...shuffled.slice(1), shuffled[0]];
+  return { type: 'order', cardId: card.id, subject: card.subject_title, answer, shuffled };
+}
+
+/** Share of words in the right place. */
+export function orderScore(answer: readonly string[], attempt: readonly string[]): number {
+  if (!answer.length) return 0;
+  return answer.filter((w, i) => attempt[i] === w).length / answer.length;
+}
+
+// Match the pairs
 
 export type MatchCard = {
   key: string;
@@ -173,35 +254,56 @@ export type MatchCard = {
   imageUri?: string;
 };
 
+export type MatchRound = { type: 'match'; prompts: MatchCard[]; answers: MatchCard[] };
+
 function clip(text: string, max = 70): string {
   const t = text.trim().replace(/\s+/g, ' ');
   return [...t].length > max ? [...t].slice(0, max - 1).join('') + '…' : t;
 }
 
 /**
- * Builds pairs of (question or page photo) ↔ the user's own keywords.
- * Returns prompts and answers shuffled independently.
+ * Pairs the start of each passage with its ending (or a question with its notes).
+ * Needs at least two cards; prompts and answers are shuffled independently.
  */
-export function makeMatch(
-  pool: readonly MatchPage[],
-  size = 4,
-  rng: Rng = Math.random,
-): { prompts: MatchCard[]; answers: MatchCard[] } | null {
-  const picked = shuffle(
-    pool.filter((p) => p.keywords.trim()),
+export function makeMatch(pool: readonly PlayCard[], size = 4, rng: Rng = Math.random): MatchRound | null {
+  const usable = shuffle(
+    pool.filter((p) => passageOf(p).split(/\s+/).length >= 4 || (p.question.trim() && p.keywords.trim())),
     rng,
   ).slice(0, size);
-  if (picked.length < 3) return null;
-  const prompts: MatchCard[] = picked.map((p) => {
-    if (p.question.trim()) return { key: `q${p.id}`, pairId: p.id, side: 'prompt', text: clip(p.question) };
-    if (p.kind === 'image') return { key: `q${p.id}`, pairId: p.id, side: 'prompt', text: p.label, imageUri: p.uri };
-    return { key: `q${p.id}`, pairId: p.id, side: 'prompt', text: `${p.subject_title} · ${p.label}` };
-  });
-  const answers: MatchCard[] = picked.map((p) => ({
-    key: `a${p.id}`,
-    pairId: p.id,
-    side: 'answer',
-    text: clip(p.keywords),
-  }));
-  return { prompts: shuffle(prompts, rng), answers: shuffle(answers, rng) };
+  if (usable.length < 2) return null;
+  const prompts: MatchCard[] = [];
+  const answers: MatchCard[] = [];
+  for (const p of usable) {
+    if (!p.text.trim() && p.question.trim() && p.keywords.trim()) {
+      prompts.push({ key: `q${p.id}`, pairId: p.id, side: 'prompt', text: clip(p.question) });
+      answers.push({ key: `a${p.id}`, pairId: p.id, side: 'answer', text: clip(p.keywords) });
+      continue;
+    }
+    const w = passageOf(p).split(/\s+/);
+    const cut = Math.max(2, Math.min(w.length - 2, Math.round(w.length / 2)));
+    prompts.push({ key: `q${p.id}`, pairId: p.id, side: 'prompt', text: clip(w.slice(0, cut).join(' ')) + ' …' });
+    answers.push({ key: `a${p.id}`, pairId: p.id, side: 'answer', text: '… ' + clip(w.slice(cut).join(' ')) });
+  }
+  return { type: 'match', prompts: shuffle(prompts, rng), answers: shuffle(answers, rng) };
+}
+
+// Choosing a round
+
+export type SingleRound = ClozeRound | TypeRound | OrderRound;
+export type SingleGame = 'cloze' | 'type' | 'order';
+
+/** Builds one round for a card, trying the requested game first and falling back to any that fits. */
+export function makeRound(
+  card: PlayCard,
+  pool: readonly PlayCard[],
+  game: SingleGame | 'mix',
+  rng: Rng = Math.random,
+): SingleRound | null {
+  const order: SingleGame[] =
+    game === 'mix' ? shuffle(['cloze', 'type', 'order'] as SingleGame[], rng) : [game, 'cloze', 'type', 'order'];
+  for (const g of order) {
+    const r = g === 'cloze' ? makeCloze(card, pool, rng) : g === 'type' ? makeTypeRound(card, rng) : makeOrderRound(card, rng);
+    if (r) return r;
+  }
+  return null;
 }

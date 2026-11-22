@@ -4,11 +4,16 @@ import { addDays, afterReview, afterStudy, todayStr, type Grade } from '@/lib/sr
 
 export const DATABASE_NAME = 'muthakara.db';
 
-export type PageKind = 'image' | 'pdf';
+export type PageKind = 'image' | 'pdf' | 'text';
+
+export type GameType = 'mix' | 'cloze' | 'type' | 'order' | 'match';
+
+export type Profile = 'university' | 'school' | 'self';
 
 export type Subject = {
   id: number;
   title: string;
+  game: GameType;
   created_at: string;
 };
 
@@ -25,6 +30,8 @@ export type Page = {
   uri: string;
   label: string;
   position: number;
+  /** The passage to memorise (read from the photo or typed). Empty when the card is just a photo/PDF page. */
+  text: string;
   keywords: string;
   question: string;
   stage: number;
@@ -36,7 +43,7 @@ export type Page = {
   created_at: string;
 };
 
-export type PageWithSubject = Page & { subject_title: string };
+export type PageWithSubject = Page & { subject_title: string; subject_game: GameType };
 
 export type Language = 'ar' | 'en';
 
@@ -44,9 +51,12 @@ export type Settings = {
   name: string;
   language: Language;
   gender: 'm' | 'f';
+  profile: Profile;
   onboarded: boolean;
   dailyMinutes: number;
-  newPerDay: number;
+  answerSeconds: number;
+  /** How many times the passage is read aloud before the last look. */
+  listenRepeats: number;
   reminderEnabled: boolean;
   reminderHour: number;
   reminderMinute: number;
@@ -57,16 +67,18 @@ export const DEFAULT_SETTINGS: Settings = {
   name: '',
   language: 'ar',
   gender: 'm',
+  profile: 'university',
   onboarded: false,
   dailyMinutes: 15,
-  newPerDay: 3,
-  reminderEnabled: false,
+  answerSeconds: 60,
+  listenRepeats: 2,
+  reminderEnabled: true,
   reminderHour: 19,
   reminderMinute: 0,
   sound: true,
 };
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {
   await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
@@ -116,6 +128,12 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
       );
     `);
   }
+  if (version < 2) {
+    await db.execAsync(`
+      ALTER TABLE subjects ADD COLUMN game TEXT NOT NULL DEFAULT 'mix';
+      ALTER TABLE pages ADD COLUMN text TEXT NOT NULL DEFAULT '';
+    `);
+  }
   await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
 
@@ -155,10 +173,11 @@ export async function getSubject(db: SQLiteDatabase, id: number): Promise<Subjec
   return db.getFirstAsync<Subject>('SELECT * FROM subjects WHERE id = ?', id);
 }
 
-export async function createSubject(db: SQLiteDatabase, title: string): Promise<number> {
+export async function createSubject(db: SQLiteDatabase, title: string, game: GameType = 'mix'): Promise<number> {
   const res = await db.runAsync(
-    'INSERT INTO subjects (title, created_at) VALUES (?, ?)',
+    'INSERT INTO subjects (title, game, created_at) VALUES (?, ?, ?)',
     title.trim(),
+    game,
     new Date().toISOString(),
   );
   return res.lastInsertRowId;
@@ -166,6 +185,10 @@ export async function createSubject(db: SQLiteDatabase, title: string): Promise<
 
 export async function renameSubject(db: SQLiteDatabase, id: number, title: string): Promise<void> {
   await db.runAsync('UPDATE subjects SET title = ? WHERE id = ?', title.trim(), id);
+}
+
+export async function setSubjectGame(db: SQLiteDatabase, id: number, game: GameType): Promise<void> {
+  await db.runAsync('UPDATE subjects SET game = ? WHERE id = ?', game, id);
 }
 
 export async function deleteSubject(db: SQLiteDatabase, id: number): Promise<string[]> {
@@ -180,7 +203,7 @@ export async function deleteSubject(db: SQLiteDatabase, id: number): Promise<str
 
 // ---------- pages ----------
 
-export type NewPage = { kind: PageKind; uri: string; label: string };
+export type NewPage = { kind: PageKind; uri: string; label: string; text?: string };
 
 export async function addPages(db: SQLiteDatabase, subjectId: number, pages: NewPage[]): Promise<void> {
   if (pages.length === 0) return;
@@ -193,12 +216,13 @@ export async function addPages(db: SQLiteDatabase, subjectId: number, pages: New
   await db.withTransactionAsync(async () => {
     for (const p of pages) {
       await db.runAsync(
-        'INSERT INTO pages (subject_id, kind, uri, label, position, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO pages (subject_id, kind, uri, label, position, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
         subjectId,
         p.kind,
         p.uri,
         p.label,
         position++,
+        p.text ?? '',
         now,
       );
     }
@@ -219,7 +243,7 @@ export async function countPages(db: SQLiteDatabase, subjectId: number): Promise
 
 export async function getPage(db: SQLiteDatabase, id: number): Promise<PageWithSubject | null> {
   return db.getFirstAsync<PageWithSubject>(
-    `SELECT p.*, s.title AS subject_title FROM pages p JOIN subjects s ON s.id = p.subject_id WHERE p.id = ?`,
+    `SELECT p.*, s.title AS subject_title, s.game AS subject_game FROM pages p JOIN subjects s ON s.id = p.subject_id WHERE p.id = ?`,
     id,
   );
 }
@@ -227,8 +251,11 @@ export async function getPage(db: SQLiteDatabase, id: number): Promise<PageWithS
 export async function updatePageNotes(
   db: SQLiteDatabase,
   id: number,
-  notes: { keywords: string; question: string; label?: string },
+  notes: { keywords: string; question: string; label?: string; text?: string },
 ): Promise<void> {
+  if (notes.text !== undefined) {
+    await db.runAsync('UPDATE pages SET text = ? WHERE id = ?', notes.text, id);
+  }
   if (notes.label !== undefined) {
     await db.runAsync(
       'UPDATE pages SET keywords = ?, question = ?, label = ? WHERE id = ?',
@@ -275,7 +302,7 @@ export async function nextNewPages(
   const where = subjectId ? 'AND p.subject_id = ?' : '';
   const params: (number | string)[] = subjectId ? [subjectId, limit] : [limit];
   return db.getAllAsync<PageWithSubject>(
-    `SELECT p.*, s.title AS subject_title FROM pages p JOIN subjects s ON s.id = p.subject_id
+    `SELECT p.*, s.title AS subject_title, s.game AS subject_game FROM pages p JOIN subjects s ON s.id = p.subject_id
      WHERE p.studied_on IS NULL ${where}
      ORDER BY s.created_at, p.position LIMIT ?`,
     ...params,
@@ -291,7 +318,7 @@ export async function duePages(db: SQLiteDatabase, today = todayStr(), subjectId
   const where = subjectId ? 'AND p.subject_id = ?' : '';
   const params: (number | string)[] = subjectId ? [today, subjectId] : [today];
   return db.getAllAsync<PageWithSubject>(
-    `SELECT p.*, s.title AS subject_title FROM pages p JOIN subjects s ON s.id = p.subject_id
+    `SELECT p.*, s.title AS subject_title, s.game AS subject_game FROM pages p JOIN subjects s ON s.id = p.subject_id
      WHERE p.due IS NOT NULL AND p.due <= ? ${where}
      ORDER BY p.due, s.created_at, p.position`,
     ...params,
@@ -407,14 +434,17 @@ export async function getStats(db: SQLiteDatabase, today = todayStr()): Promise<
   };
 }
 
-/** Studied pages that have notes, used to build the memory games. */
+/**
+ * Cards that have words to play with (their passage or the user's notes).
+ * Studied cards come first, but any card can be played: there is no minimum.
+ */
 export async function gamePool(db: SQLiteDatabase, subjectId?: number): Promise<PageWithSubject[]> {
   const where = subjectId ? 'AND p.subject_id = ?' : '';
   const params: number[] = subjectId ? [subjectId] : [];
   return db.getAllAsync<PageWithSubject>(
-    `SELECT p.*, s.title AS subject_title FROM pages p JOIN subjects s ON s.id = p.subject_id
-     WHERE p.studied_on IS NOT NULL AND TRIM(p.keywords) <> '' ${where}
-     ORDER BY RANDOM() LIMIT 60`,
+    `SELECT p.*, s.title AS subject_title, s.game AS subject_game FROM pages p JOIN subjects s ON s.id = p.subject_id
+     WHERE (TRIM(p.text) <> '' OR TRIM(p.keywords) <> '') ${where}
+     ORDER BY (p.studied_on IS NULL), RANDOM() LIMIT 60`,
     ...params,
   );
 }

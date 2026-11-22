@@ -4,6 +4,7 @@ import { I18nManager } from 'react-native';
 
 import { DEFAULT_SETTINGS, getSettings, saveSettings, type Settings } from '@/lib/db';
 import { getStrings, type Strings } from '@/lib/i18n';
+import { cancelReminders, scheduleDailyReminder } from '@/lib/reminders';
 import { setSoundEnabled } from '@/lib/sound';
 
 type AppContextValue = {
@@ -31,6 +32,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSoundEnabled(settings.sound);
   }, [settings.sound]);
 
+  // Keep the daily reminder in sync with the settings (time, language, name).
+  const { onboarded, reminderEnabled, reminderHour, reminderMinute, name, language, gender, profile } = settings;
+  useEffect(() => {
+    if (!ready || !onboarded) return;
+    if (!reminderEnabled) {
+      cancelReminders().catch(() => {});
+      return;
+    }
+    const s = getStrings(language, gender, profile);
+    scheduleDailyReminder({
+      hour: reminderHour,
+      minute: reminderMinute,
+      title: s.reminderTitle(name.trim()),
+      bodies: s.reminders,
+    }).catch(() => {});
+  }, [ready, onboarded, reminderEnabled, reminderHour, reminderMinute, name, language, gender, profile]);
+
   const updateSettings = useCallback(
     async (patch: Partial<Settings>) => {
       setSettings((prev) => ({ ...prev, ...patch }));
@@ -44,7 +62,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ready,
       settings,
       updateSettings,
-      s: getStrings(settings.language, settings.gender),
+      s: getStrings(settings.language, settings.gender, settings.profile),
       rtl: settings.language === 'ar',
     }),
     [ready, settings, updateSettings],
@@ -76,5 +94,7 @@ export function useDirection() {
     textAlign: (flip ? 'right' : 'left') as 'left' | 'right',
     writingDirection: (rtl ? 'rtl' : 'ltr') as 'rtl' | 'ltr',
     alignStart: (flip ? 'flex-end' : 'flex-start') as 'flex-start' | 'flex-end',
+    /** Text alignment for content in a given direction, independent of the UI language. */
+    alignFor: (dir: 'rtl' | 'ltr') => ((dir === 'rtl') !== SYSTEM_RTL ? 'right' : 'left') as 'left' | 'right',
   };
 }

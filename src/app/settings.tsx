@@ -1,90 +1,81 @@
-import { Stack } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Switch, View } from 'react-native';
+import { Platform, Switch, View } from 'react-native';
 
-import { Button, Card, Input, Row, Screen, Section, Stepper, Txt } from '@/components/ui';
+import { Card, IconBadge, Input, Row, Screen, Section, Segmented, Stepper, Txt, notify } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-context';
-import type { Language } from '@/lib/db';
-import { cancelReminders, scheduleDailyReminder } from '@/lib/reminders';
+import type { Profile } from '@/lib/db';
+import { scheduleDailyReminder } from '@/lib/reminders';
 
 export default function Settings() {
   const { settings, updateSettings, s } = useApp();
   const c = useTheme();
   const [name, setName] = useState(settings.name);
 
-  const applyReminder = async (enabled: boolean, hour = settings.reminderHour, minute = settings.reminderMinute) => {
-    if (enabled) {
+  const toggleReminder = async (enabled: boolean) => {
+    if (enabled && Platform.OS !== 'web') {
+      // Ask for permission right away so we can tell the user if it is blocked.
       const ok = await scheduleDailyReminder({
-        hour,
-        minute,
+        hour: settings.reminderHour,
+        minute: settings.reminderMinute,
         title: s.reminderTitle(settings.name),
-        body: s.reminderBody,
+        bodies: s.reminders,
       });
       if (!ok) {
-        Alert.alert(s.notifDenied);
-        await updateSettings({ reminderEnabled: false });
+        notify(s.notifDenied);
         return;
       }
-    } else {
-      await cancelReminders();
     }
-    await updateSettings({ reminderEnabled: enabled, reminderHour: hour, reminderMinute: minute });
+    await updateSettings({ reminderEnabled: enabled });
   };
 
-  const setLanguage = (language: Language) => updateSettings({ language });
+  const row = (label: string, control: React.ReactNode) => (
+    <Row style={{ justifyContent: 'space-between' }}>
+      <Txt style={{ flex: 1 }}>{label}</Txt>
+      {control}
+    </Row>
+  );
 
   return (
-    <Screen>
-      <Stack.Screen options={{ title: s.settings }} />
-
+    <Screen title={s.settings}>
       <Section title={s.yourName}>
         <Input value={name} onChangeText={setName} onBlur={() => updateSettings({ name: name.trim() })} />
       </Section>
 
       <Section title={s.chooseLanguage}>
-        <Row gap={Spacing.two}>
-          <Button
-            style={{ flex: 1 }}
-            variant={settings.language === 'ar' ? 'primary' : 'ghost'}
-            title="العربية"
-            onPress={() => setLanguage('ar')}
+        <Segmented
+          options={[
+            { value: 'ar', label: 'العربية' },
+            { value: 'en', label: 'English' },
+          ]}
+          value={settings.language}
+          onChange={(language) => updateSettings({ language })}
+        />
+        {settings.language === 'ar' ? (
+          <Segmented
+            options={[
+              { value: 'm', label: s.male },
+              { value: 'f', label: s.female },
+            ]}
+            value={settings.gender}
+            onChange={(gender) => updateSettings({ gender })}
           />
-          <Button
-            style={{ flex: 1 }}
-            variant={settings.language === 'en' ? 'primary' : 'ghost'}
-            title="English"
-            onPress={() => setLanguage('en')}
-          />
-        </Row>
+        ) : null}
       </Section>
 
-      {settings.language === 'ar' ? (
-        <Section title={s.iAm}>
-          <Row gap={Spacing.two}>
-            <Button
-              style={{ flex: 1 }}
-              variant={settings.gender === 'm' ? 'primary' : 'ghost'}
-              icon="🧑‍🎓"
-              title={s.male}
-              onPress={() => updateSettings({ gender: 'm' })}
-            />
-            <Button
-              style={{ flex: 1 }}
-              variant={settings.gender === 'f' ? 'primary' : 'ghost'}
-              icon="👩‍🎓"
-              title={s.female}
-              onPress={() => updateSettings({ gender: 'f' })}
-            />
-          </Row>
-        </Section>
-      ) : null}
+      <Section title={s.whoAreYou}>
+        <Segmented<Profile>
+          options={(['university', 'school', 'self'] as Profile[]).map((p) => ({ value: p, label: s.profiles[p] }))}
+          value={settings.profile}
+          onChange={(profile) => updateSettings({ profile })}
+        />
+      </Section>
 
-      <Section title={s.todayGoal}>
+      <Section title={s.studySession}>
         <Card>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <Txt>{s.dailyMinutes}</Txt>
+          {row(
+            s.dailyMinutes,
             <Stepper
               value={settings.dailyMinutes}
               min={5}
@@ -92,36 +83,50 @@ export default function Settings() {
               step={5}
               format={(v) => s.minutesShort(v)}
               onChange={(v) => updateSettings({ dailyMinutes: v })}
+            />,
+          )}
+          <View style={{ gap: Spacing.two }}>
+            <Txt>{s.answerTime}</Txt>
+            <Segmented
+              options={[30, 60, 90].map((v) => ({ value: v, label: s.seconds(v) }))}
+              value={settings.answerSeconds}
+              onChange={(v) => updateSettings({ answerSeconds: v })}
             />
-          </Row>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <Txt>{s.newPerDay}</Txt>
-            <Stepper value={settings.newPerDay} min={1} max={20} onChange={(v) => updateSettings({ newPerDay: v })} />
-          </Row>
+          </View>
+          <View style={{ gap: Spacing.two }}>
+            <Txt>{s.listenRepeats}</Txt>
+            <Segmented
+              options={[1, 2].map((v) => ({ value: v, label: s.times(v) }))}
+              value={settings.listenRepeats}
+              onChange={(v) => updateSettings({ listenRepeats: v })}
+            />
+          </View>
         </Card>
       </Section>
 
       <Section title={s.reminder}>
         <Card>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <Txt>{s.reminder}</Txt>
-            <Switch
-              value={settings.reminderEnabled}
-              onValueChange={(v) => applyReminder(v)}
-              trackColor={{ true: c.primary }}
-            />
-          </Row>
+          {row(
+            s.reminder,
+            <Switch value={settings.reminderEnabled} onValueChange={toggleReminder} trackColor={{ true: c.primary }} />,
+          )}
+          {Platform.OS === 'web' ? (
+            <Txt variant="caption" muted>
+              {s.reminderWebNote}
+            </Txt>
+          ) : null}
           {settings.reminderEnabled ? (
             <View style={{ gap: Spacing.two }}>
               <Txt>{s.reminderTime}</Txt>
               {/* Clock time always reads hour:minute, left to right. */}
-              <View style={{ flexDirection: 'row', direction: 'ltr', alignItems: 'center', gap: Spacing.two, justifyContent: 'center' }}>
+              <View
+                style={{ flexDirection: 'row', direction: 'ltr', alignItems: 'center', gap: Spacing.two, justifyContent: 'center' }}>
                 <Stepper
                   value={settings.reminderHour}
                   min={0}
                   max={23}
                   format={(v) => String(v).padStart(2, '0')}
-                  onChange={(v) => applyReminder(true, v, settings.reminderMinute)}
+                  onChange={(v) => updateSettings({ reminderHour: v })}
                 />
                 <Txt variant="title">:</Txt>
                 <Stepper
@@ -130,7 +135,7 @@ export default function Settings() {
                   max={55}
                   step={5}
                   format={(v) => String(v).padStart(2, '0')}
-                  onChange={(v) => applyReminder(true, settings.reminderHour, v)}
+                  onChange={(v) => updateSettings({ reminderMinute: v })}
                 />
               </View>
             </View>
@@ -138,22 +143,19 @@ export default function Settings() {
         </Card>
       </Section>
 
-      <Section title={s.sound}>
-        <Card>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <Txt>{s.sound}</Txt>
-            <Switch
-              value={settings.sound}
-              onValueChange={(v) => updateSettings({ sound: v })}
-              trackColor={{ true: c.primary }}
-            />
-          </Row>
-        </Card>
-      </Section>
+      <Card>
+        {row(
+          s.sound,
+          <Switch value={settings.sound} onValueChange={(v) => updateSettings({ sound: v })} trackColor={{ true: c.primary }} />,
+        )}
+      </Card>
 
       <Section title={s.howItWorks}>
         <Card tone="primary">
-          <Txt>{s.howItWorksBody}</Txt>
+          <Row align="flex-start">
+            <IconBadge icon="leaf-outline" size={36} />
+            <Txt style={{ flex: 1 }}>{s.howItWorksBody}</Txt>
+          </Row>
         </Card>
       </Section>
     </Screen>
