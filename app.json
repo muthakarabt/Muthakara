@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "muthakara",
+    "name": "مذاكرة",
     "slug": "muthakara",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -20,7 +20,7 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "server",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -32,10 +32,25 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "يحتاج التطبيق الكاميرا لتصوير صفحات الدراسة. The app uses the camera to capture study pages.",
+          "photosPermission": "يحتاج التطبيق الصور لإضافة صفحات الدراسة. The app uses your photos to add study pages."
+        }
+      ],
+      "expo-sqlite",
+      [
+        "expo-notifications",
+        {
+          "color": "#1F7A6B"
+        }
+      ],
+      "expo-audio"
     ],
     "experiments": {
-      "typedRoutes": true,
+      "typedRoutes": false,
       "reactCompiler": true
     }
   }

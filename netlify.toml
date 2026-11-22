@@ -1,0 +1,22 @@
+# Deploys the web version of the app to Netlify (free plan).
+[build]
+  command = "npx expo export --platform web"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  EXPO_NO_TELEMETRY = "1"
+
+# expo-sqlite runs in the browser through SharedArrayBuffer, which needs
+# cross-origin isolation.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Embedder-Policy = "credentialless"
+    Cross-Origin-Opener-Policy = "same-origin"
+
+# Single-page app: let the client router handle every path.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

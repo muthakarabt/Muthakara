@@ -1,56 +1,52 @@
-# Welcome to your Expo app 👋
+# مذاكرة · Muthakara
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+تطبيق للدراسة بالمراجعة المتباعدة: ادرس صفحات قليلة كل يوم في جلسة قصيرة (مثل 15 دقيقة)، والتطبيق يذكّرك بمراجعتها بعد 1 ثم 3 ثم 7 ثم 14 ثم 30 ثم 60 يوماً حتى تثبت في ذاكرتك.
 
-## Get started
+A spaced-repetition study app: study a few pages a day in a short session, then review each page after 1, 3, 7, 14, 30 and 60 days.
 
-1. Install dependencies
+## المزايا · Features
 
-   ```bash
-   npm install
-   ```
+- **إضافة المحتوى:** تصوير الصفحات بالكاميرا، أو اختيار صور من المعرض، أو رفع ملف PDF وتحديد الصفحات.
+- **جلسات يومية قصيرة:** مؤقت لهدف الدقائق اليومي، وعدد محدد من الصفحات الجديدة كل يوم.
+- **التثبيت:** تحت كل صفحة تكتب كلمات مفتاحية وسؤالاً لنفسك.
+- **المراجعة:** يظهر سؤالك أولاً لتتذكر، ثم تكشف الصفحة وتقيّم نفسك (تذكرت / بصعوبة / نسيت).
+- **ألعاب التذكر:** "أكمل الفراغ" و"طابق الأزواج"، مبنية من ملاحظاتك أنت.
+- **نقاط ومستويات وإنجازات** وسلسلة أيام متتالية.
+- **أصوات تشجيع قصيرة** بدون موسيقى (يمكن إيقافها).
+- **لغتان:** العربية والإنجليزية، مع صيغة طالب/طالبة في العربية، ورسائل تشجيع باسم المستخدم.
+- **تذكير يومي** في الوقت الذي تختاره (في تطبيق الجوال).
+- **خصوصية:** كل البيانات محفوظة على الجهاز فقط، بدون خادم أو اشتراك.
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## التشغيل · Running it
 
 ```bash
-npm run reset-project
+npm install
+npx expo start          # scan the QR code with Expo Go on your phone
+npx expo start --web    # run in the browser
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+## الاختبارات · Checks
 
-### Other setup steps
+```bash
+node --experimental-strip-types --test src/lib/*.test.ts   # scheduling + game logic
+npx tsc --noEmit
+npx expo lint
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## نشر الموقع · Web deploy
 
-## Learn more
+`netlify.toml` builds the web version with `npx expo export --platform web` and sets the
+cross-origin isolation headers that the in-browser SQLite database needs. Connect the
+repository in Netlify and it deploys on every push to `main`.
 
-To learn more about developing your project with Expo, look at the following resources:
+## هيكل الكود · Code layout
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+| Path | What it holds |
+| --- | --- |
+| `src/app/` | Screens (Expo Router): home, welcome, study, review, subject, page, settings, games |
+| `src/components/` | Shared UI, page viewer, points/achievement toasts |
+| `src/lib/srs.ts` | Review scheduling (intervals, grades) |
+| `src/lib/game.ts` | Points, levels, achievements, puzzle generators |
+| `src/lib/db.ts` | SQLite schema and queries |
+| `src/lib/i18n.ts` | Arabic (male/female) and English text |
+| `scripts/make-sounds.py` | Generates the sound effects in `assets/sounds/` |
