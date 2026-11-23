@@ -23,6 +23,7 @@ import {
   type IconName,
 } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
+import { useSingleFlight } from '@/hooks/use-single-flight';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-context';
 import { duePages, recordReview, type PageWithSubject } from '@/lib/db';
@@ -58,7 +59,7 @@ export default function Review() {
   const page = queue?.[index];
   const today = todayStr();
 
-  const grade = async (g: Grade) => {
+  const grade = useSingleFlight(async (g: Grade) => {
     if (!page) return;
     await recordReview(db, page, g, today);
     setTally((t) => ({ ...t, [g]: t[g] + 1 }));
@@ -74,7 +75,7 @@ export default function Review() {
     await award(g === 'good' ? XP.reviewGood : g === 'hard' ? XP.reviewHard : XP.reviewAgain, 'review');
     if (queue && index + 1 >= queue.length && g !== 'again') playSound('complete');
     setIndex((i) => i + 1);
-  };
+  });
 
   if (!queue) return <Screen title={s.reviewSession}>{null}</Screen>;
 

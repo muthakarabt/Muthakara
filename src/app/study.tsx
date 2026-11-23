@@ -23,6 +23,7 @@ import {
   type IconName,
 } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
+import { useSingleFlight } from '@/hooks/use-single-flight';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-context';
 import {
@@ -75,7 +76,7 @@ export default function Study() {
     }, [db, currentId]),
   );
 
-  const finishPage = async (opts: { notes?: { keywords: string; question: string }; correct?: boolean }) => {
+  const finishPage = useSingleFlight(async (opts: { notes?: { keywords: string; question: string }; correct?: boolean }) => {
     if (!page) return;
     if (opts.notes) await updatePageNotes(db, page.id, opts.notes);
     await markStudied(db, page.id, todayStr());
@@ -84,7 +85,7 @@ export default function Study() {
     setStudied((n) => n + 1);
     if (queue && index + 1 >= queue.length) playSound('complete');
     setIndex((i) => i + 1);
-  };
+  });
 
   if (!queue) return <Screen title={s.studySession}>{null}</Screen>;
 

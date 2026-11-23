@@ -66,6 +66,20 @@ test('typed round hides 1–3 words and rebuilds the passage', () => {
   }
 });
 
+test('type round handles key words wrapped in quotes or brackets', () => {
+  const texts = ['قال المعلم «الضوئي»', 'The cell has a (nucleus)', '«البناء» الضوئي في الخلايا النباتية الخضراء'];
+  for (const text of texts) {
+    for (let seed = 1; seed < 40; seed++) {
+      const r = makeTypeRound(card(1, text), seeded(seed));
+      assert.ok(r);
+      assert.equal(r.before + r.answer + r.after, text);
+      // The blank is the word itself, never the punctuation around it.
+      assert.match(r.answer, /^[\p{L}\p{N}]/u);
+      assert.match(r.answer, /[\p{L}\p{N}\p{M}]$/u);
+    }
+  }
+});
+
 test('order round is never pre-solved and scores positions', () => {
   for (let seed = 1; seed < 25; seed++) {
     const r = makeOrderRound(card(1, P1), seeded(seed));

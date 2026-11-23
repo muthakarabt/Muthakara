@@ -189,12 +189,17 @@ export function makeTypeRound(card: PlayCard, rng: Rng = Math.random): TypeRound
   const pick = pickKeyWord(candidates, rng);
   // Extend the blank to the following word(s) when the passage is long enough to keep context.
   const all = [...text.matchAll(/\S+/g)].map((m) => ({ word: m[0], index: m.index ?? 0 }));
-  const start = all.findIndex((w) => w.index >= pick.index);
+  // The token that holds the key word. It can start earlier than the word itself
+  // when punctuation is attached, e.g. «word» or (word.
+  let start = 0;
+  while (start + 1 < all.length && all[start + 1].index <= pick.index) start++;
   const extra = all.length >= 12 ? Math.floor(rng() * 3) : 0; // 0–2 extra words
   const end = Math.min(all.length - 1, start + extra);
-  const from = all[start].index;
-  const lastWord = all[end].word.replace(/[.,،؛;:!?؟]+$/u, '');
-  const to = all[end].index + lastWord.length;
+  const from = pick.index;
+  const to =
+    end === start
+      ? pick.index + pick.word.length
+      : all[end].index + all[end].word.replace(/[^\p{L}\p{N}\p{M}]+$/u, '').length;
   return {
     type: 'type',
     cardId: card.id,
