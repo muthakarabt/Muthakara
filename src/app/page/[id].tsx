@@ -1,13 +1,14 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
 
 import { PageView } from '@/components/page-view';
-import { Button, Card, Input, Pill, Row, Screen, Section, Txt, confirmAction, notify } from '@/components/ui';
-import { Spacing } from '@/constants/theme';
+import { Button, Card, Icon, Input, Pill, Row, Screen, Section, Txt, confirmAction, haptic, notify } from '@/components/ui';
+import { Radius, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-context';
-import { deletePage, getPage, resetPage, updatePageNotes, type PageWithSubject } from '@/lib/db';
+import { deletePage, getPage, resetPage, setPageImportant, updatePageNotes, type PageWithSubject } from '@/lib/db';
 import { relativeDay } from '@/lib/i18n';
 import { deleteFiles } from '@/lib/media';
 import { findVoice, readAloud } from '@/lib/speech';
@@ -19,6 +20,7 @@ export default function PageScreen() {
   const pageId = Number(id);
   const db = useSQLiteContext();
   const { s } = useApp();
+  const c = useTheme();
   const [page, setPage] = useState<PageWithSubject | null>(null);
   const [text, setText] = useState('');
   const [keywords, setKeywords] = useState('');
@@ -80,9 +82,17 @@ export default function PageScreen() {
     router.back();
   };
 
+  const toggleImportant = async () => {
+    if (!page) return;
+    haptic();
+    await setPageImportant(db, pageId, !page.important);
+    await load();
+  };
+
   if (!page) return <Screen title="">{null}</Screen>;
   const today = todayStr();
   const dir = detectLanguage(text) === 'ar' ? 'rtl' : 'ltr';
+  const qa = page.qa === 1;
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -103,8 +113,44 @@ export default function PageScreen() {
           </Txt>
         </Card>
 
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: !!page.important }}
+          onPress={toggleImportant}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: Spacing.three,
+            padding: Spacing.three,
+            borderRadius: Radius.medium,
+            borderWidth: 1.5,
+            borderColor: page.important ? c.accent : c.border,
+            backgroundColor: page.important ? c.accentSoft : c.card,
+          }}>
+          <Icon name={page.important ? 'star' : 'star-outline'} color={c.accent} />
+          <View style={{ flex: 1 }}>
+            <Txt bold>{s.importantLabel}</Txt>
+            <Txt variant="caption" muted>
+              {s.importantHint}
+            </Txt>
+          </View>
+        </Pressable>
+
+        {qa ? (
+          <Section title={s.theQuestion}>
+            <Input
+              value={question}
+              onChangeText={setQuestion}
+              placeholder={s.questionTextPlaceholder}
+              multiline
+              dir={question && detectLanguage(question) === 'en' ? 'ltr' : 'rtl'}
+              style={{ fontSize: 17, minHeight: 70 }}
+            />
+          </Section>
+        ) : null}
+
         <Section
-          title={s.passage}
+          title={qa ? s.theAnswerLabel : s.passage}
           action={
             text.trim() ? (
               <Button
@@ -116,7 +162,7 @@ export default function PageScreen() {
               />
             ) : null
           }>
-          {!text.trim() ? (
+          {!text.trim() && !qa ? (
             <Txt variant="caption" muted>
               {s.addTextHint}
             </Txt>
@@ -133,10 +179,12 @@ export default function PageScreen() {
 
         {page.uri ? <PageView page={page} height={320} /> : null}
 
-        <Section title={s.keywords}>
-          <Input placeholder={s.keywordsPlaceholder} value={keywords} onChangeText={setKeywords} multiline />
-          <Input label={s.question} placeholder={s.questionPlaceholder} value={question} onChangeText={setQuestion} />
-        </Section>
+        {!qa ? (
+          <Section title={s.keywords}>
+            <Input placeholder={s.keywordsPlaceholder} value={keywords} onChangeText={setKeywords} multiline />
+            <Input label={s.question} placeholder={s.questionPlaceholder} value={question} onChangeText={setQuestion} />
+          </Section>
+        ) : null}
 
         <Button icon={saved ? 'checkmark-done' : 'save-outline'} title={saved ? s.saved : s.save} onPress={save} />
 

@@ -1,5 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import type { ClaudeModel } from '@/lib/claude';
 import { addDays, afterReview, afterStudy, todayStr, type Grade } from '@/lib/srs';
 
 export const DATABASE_NAME = 'muthakara.db';
@@ -14,6 +15,8 @@ export type Subject = {
   id: number;
   title: string;
   game: GameType;
+  /** The exam day (YYYY-MM-DD), or '' when none is set. */
+  exam_date: string;
   created_at: string;
 };
 
@@ -34,6 +37,10 @@ export type Page = {
   text: string;
   keywords: string;
   question: string;
+  /** 1 = a question card: `question` is asked and `text` is its answer. */
+  qa: number;
+  /** 1 = the teacher stressed this part: studied first and reviewed more often. */
+  important: number;
   stage: number;
   due: string | null;
   studied_on: string | null;
@@ -43,7 +50,7 @@ export type Page = {
   created_at: string;
 };
 
-export type PageWithSubject = Page & { subject_title: string; subject_game: GameType };
+export type PageWithSubject = Page & { subject_title: string; subject_game: GameType; subject_exam?: string };
 
 export type Language = 'ar' | 'en';
 
@@ -63,6 +70,14 @@ export type Settings = {
   sound: boolean;
   /** Web: the home screen already suggested adding the calendar reminder. */
   reminderPrompted: boolean;
+  /** Use the app's built-in AI (Claude) to read photos and write questions. */
+  aiCloud: boolean;
+  /** Random id for the built-in AI's daily allowance; not linked to the person. */
+  deviceId: string;
+  /** Optional: the user's own Claude or Google key instead of the built-in AI (stays on the device). */
+  aiKey: string;
+  /** Which Claude model reads photos and writes questions when the key is an Anthropic one. */
+  aiModel: ClaudeModel;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -79,9 +94,13 @@ export const DEFAULT_SETTINGS: Settings = {
   reminderMinute: 0,
   sound: true,
   reminderPrompted: false,
+  aiCloud: true,
+  deviceId: '',
+  aiKey: '',
+  aiModel: 'claude-opus-5-5',
 };
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 4;
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {
   await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
@@ -136,6 +155,15 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
       ALTER TABLE subjects ADD COLUMN game TEXT NOT NULL DEFAULT 'mix';
       ALTER TABLE pages ADD COLUMN text TEXT NOT NULL DEFAULT '';
     `);
+  }
+  if (version < 3) {
+    await db.execAsync(`
+      ALTER TABLE pages ADD COLUMN qa INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE pages ADD COLUMN important INTEGER NOT NULL DEFAULT 0;
+    `);
+  }
+  if (version < 4) {
+    await db.execAsync(`ALTER TABLE subjects ADD COLUMN exam_date TEXT NOT NULL DEFAULT '';`);
   }
   await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
@@ -194,6 +222,32 @@ export async function setSubjectGame(db: SQLiteDatabase, id: number, game: GameT
   await db.runAsync('UPDATE subjects SET game = ? WHERE id = ?', game, id);
 }
 
+export async function setSubjectExam(db: SQLiteDatabase, id: number, examDate: string): Promise<void> {
+  await db.runAsync('UPDATE subjects SET exam_date = ? WHERE id = ?', examDate, id);
+}
+
+/** Subjects with an exam today or later, soonest first. */
+export async function upcomingExams(db: SQLiteDatabase, today = todayStr()): Promise<Subject[]> {
+  return db.getAllAsync<Subject>(
+    "SELECT * FROM subjects WHERE exam_date != '' AND exam_date >= ? ORDER BY exam_date",
+    today,
+  );
+}
+
+/**
+ * Everything in a subject for an exam cram: the parts the teacher stressed
+ * first, then the ones forgotten most or learned least, new parts last.
+ */
+export async function examPages(db: SQLiteDatabase, subjectId: number): Promise<PageWithSubject[]> {
+  return db.getAllAsync<PageWithSubject>(
+    `SELECT p.*, s.title AS subject_title, s.game AS subject_game, s.exam_date AS subject_exam
+     FROM pages p JOIN subjects s ON s.id = p.subject_id
+     WHERE p.subject_id = ?
+     ORDER BY p.important DESC, (p.studied_on IS NULL), p.lapses DESC, p.stage, p.position`,
+    subjectId,
+  );
+}
+
 export async function deleteSubject(db: SQLiteDatabase, id: number): Promise<string[]> {
   const uris = await db.getAllAsync<{ uri: string }>(
     'SELECT DISTINCT uri FROM pages WHERE subject_id = ?',
@@ -206,7 +260,16 @@ export async function deleteSubject(db: SQLiteDatabase, id: number): Promise<str
 
 // ---------- pages ----------
 
-export type NewPage = { kind: PageKind; uri: string; label: string; text?: string };
+export type NewPage = {
+  kind: PageKind;
+  uri: string;
+  label: string;
+  text?: string;
+  /** For question cards. */
+  question?: string;
+  qa?: boolean;
+  important?: boolean;
+};
 
 export async function addPages(db: SQLiteDatabase, subjectId: number, pages: NewPage[]): Promise<void> {
   if (pages.length === 0) return;
@@ -219,13 +282,16 @@ export async function addPages(db: SQLiteDatabase, subjectId: number, pages: New
   await db.withTransactionAsync(async () => {
     for (const p of pages) {
       await db.runAsync(
-        'INSERT INTO pages (subject_id, kind, uri, label, position, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO pages (subject_id, kind, uri, label, position, text, question, qa, important, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         subjectId,
         p.kind,
         p.uri,
         p.label,
         position++,
         p.text ?? '',
+        p.question ?? '',
+        p.qa ? 1 : 0,
+        p.important ? 1 : 0,
         now,
       );
     }
@@ -281,6 +347,10 @@ export async function deletePage(db: SQLiteDatabase, id: number): Promise<string
   return (others?.n ?? 0) === 0 ? page.uri : null;
 }
 
+export async function setPageImportant(db: SQLiteDatabase, id: number, important: boolean): Promise<void> {
+  await db.runAsync('UPDATE pages SET important = ? WHERE id = ?', important ? 1 : 0, id);
+}
+
 export async function resetPage(db: SQLiteDatabase, id: number): Promise<void> {
   await db.runAsync(
     'UPDATE pages SET stage = 0, due = NULL, studied_on = NULL, last_reviewed = NULL, reviews = 0, lapses = 0 WHERE id = ?',
@@ -307,7 +377,7 @@ export async function nextNewPages(
   return db.getAllAsync<PageWithSubject>(
     `SELECT p.*, s.title AS subject_title, s.game AS subject_game FROM pages p JOIN subjects s ON s.id = p.subject_id
      WHERE p.studied_on IS NULL ${where}
-     ORDER BY s.created_at, p.position LIMIT ?`,
+     ORDER BY s.created_at, p.important DESC, p.position LIMIT ?`,
     ...params,
   );
 }
@@ -321,9 +391,10 @@ export async function duePages(db: SQLiteDatabase, today = todayStr(), subjectId
   const where = subjectId ? 'AND p.subject_id = ?' : '';
   const params: (number | string)[] = subjectId ? [today, subjectId] : [today];
   return db.getAllAsync<PageWithSubject>(
-    `SELECT p.*, s.title AS subject_title, s.game AS subject_game FROM pages p JOIN subjects s ON s.id = p.subject_id
+    `SELECT p.*, s.title AS subject_title, s.game AS subject_game, s.exam_date AS subject_exam
+     FROM pages p JOIN subjects s ON s.id = p.subject_id
      WHERE p.due IS NOT NULL AND p.due <= ? ${where}
-     ORDER BY p.due, s.created_at, p.position`,
+     ORDER BY p.due, p.important DESC, s.created_at, p.position`,
     ...params,
   );
 }
@@ -334,14 +405,16 @@ export async function markStudied(db: SQLiteDatabase, id: number, today = todayS
 }
 
 export async function recordReview(db: SQLiteDatabase, page: Page, grade: Grade, today = todayStr()): Promise<void> {
-  const s = afterReview(page.stage, grade, today);
+  const sub = await db.getFirstAsync<{ exam_date: string }>('SELECT exam_date FROM subjects WHERE id = ?', page.subject_id);
+  const s = afterReview(page.stage, grade, today, page.important === 1, sub?.exam_date);
   await db.runAsync(
     `UPDATE pages SET stage = ?, due = ?, last_reviewed = ?, reviews = reviews + 1,
-       lapses = lapses + ? WHERE id = ?`,
+       lapses = lapses + ?, studied_on = COALESCE(studied_on, ?) WHERE id = ?`,
     s.stage,
     s.due,
     today,
     grade === 'again' ? 1 : 0,
+    today,
     page.id,
   );
 }

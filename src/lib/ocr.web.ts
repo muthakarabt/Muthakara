@@ -1,102 +1,66 @@
 /**
  * Reads Arabic and English text from a page photo in the browser using
- * Tesseract. The engine and language files are served from /ocr (copied there
- * by scripts/copy-ocr-assets.js), so nothing is sent to any outside server.
+ * Tesseract. The engine, language files and the shared preparation step
+ * (public/ocr-pipeline.js) are served from this site, so nothing is sent to
+ * any outside server.
  */
 import type { ReactNode } from 'react';
 
-type TesseractWorker = {
-  recognize: (image: string) => Promise<{ data: { text: string } }>;
-  terminate: () => Promise<void>;
-};
-type TesseractGlobal = {
-  createWorker: (langs: string, oem: number, options: Record<string, unknown>) => Promise<TesseractWorker>;
+export type PdfText = { pages: string[]; total: number };
+export type PdfProgress = (done: number, page: number) => void;
+
+type Pipeline = {
+  recognize: (src: string, onProgress?: (p: number) => void) => Promise<string>;
+  readPdf: (src: string, onProgress?: PdfProgress) => Promise<PdfText>;
 };
 
 export type OcrStatus = 'loading' | 'ready' | 'failed';
 
-let scriptPromise: Promise<TesseractGlobal> | null = null;
-let workerPromise: Promise<TesseractWorker> | null = null;
-let progressListener: ((p: number) => void) | null = null;
+let pipelinePromise: Promise<Pipeline> | null = null;
 
-function loadScript(): Promise<TesseractGlobal> {
-  scriptPromise ??= new Promise((resolve, reject) => {
-    const w = window as unknown as { Tesseract?: TesseractGlobal };
-    if (w.Tesseract) return resolve(w.Tesseract);
+function loadScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
     const el = document.createElement('script');
-    el.src = '/ocr/tesseract.min.js';
-    el.async = true;
-    el.onload = () => (w.Tesseract ? resolve(w.Tesseract) : reject(new Error('Tesseract missing')));
-    el.onerror = () => reject(new Error('Could not load OCR engine'));
+    el.src = src;
+    el.async = false;
+    el.onload = () => resolve();
+    el.onerror = () => reject(new Error('Could not load ' + src));
     document.head.appendChild(el);
   });
-  return scriptPromise;
 }
 
-function getWorker(): Promise<TesseractWorker> {
-  workerPromise ??= loadScript()
-    .then((T) =>
-      T.createWorker('ara+eng', 1, {
-        workerPath: '/ocr/worker.min.js',
-        corePath: '/ocr/',
-        langPath: '/ocr',
-        gzip: false,
-        logger: (m: { status: string; progress: number }) => {
-          if (m.status === 'recognizing text') progressListener?.(m.progress);
-        },
-      }),
-    )
-    .catch((e) => {
-      workerPromise = null; // allow a retry later
-      scriptPromise = null;
-      throw e;
-    });
-  return workerPromise;
-}
-
-/**
- * Tesseract reads best when letters are about 30–40px tall. Screenshots and
- * small photos are scaled up (and very large photos down) and turned grey first.
- */
-async function prepare(uri: string): Promise<string> {
-  const img = new Image();
-  img.src = uri;
-  await img.decode();
-  const scale = Math.min(3, Math.max(0.5, 2400 / img.naturalWidth));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(img.naturalWidth * scale);
-  canvas.height = Math.round(img.naturalHeight * scale);
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return uri;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.filter = 'grayscale(1) contrast(1.15)';
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/png');
+function getPipeline(): Promise<Pipeline> {
+  const w = window as unknown as { MuthakaraOCR?: Pipeline; Tesseract?: unknown };
+  pipelinePromise ??= (async () => {
+    if (!w.Tesseract) await loadScript('/ocr/tesseract.min.js');
+    if (!w.MuthakaraOCR) await loadScript('/ocr-pipeline.js');
+    if (!w.MuthakaraOCR) throw new Error('OCR pipeline missing');
+    return w.MuthakaraOCR;
+  })().catch((e) => {
+    pipelinePromise = null; // allow a retry later
+    throw e;
+  });
+  return pipelinePromise;
 }
 
 /** Returns the recognised text; `onProgress` gets 0..1 while the page is read. */
 async function recognize(uri: string, onProgress?: (p: number) => void): Promise<string> {
-  const worker = await getWorker();
-  progressListener = onProgress ?? null;
-  try {
-    let image = uri;
-    try {
-      image = await prepare(uri);
-    } catch {
-      // fall back to the original picture
-    }
-    const { data } = await worker.recognize(image);
-    return data.text;
-  } finally {
-    progressListener = null;
-  }
+  const pipeline = await getPipeline();
+  return pipeline.recognize(uri, onProgress);
+}
+
+/** Reads the text of every page of a PDF (scanned pages are read like photos). */
+async function readPdf(uri: string, onProgress?: PdfProgress): Promise<PdfText> {
+  const pipeline = await getPipeline();
+  return pipeline.readPdf(uri, onProgress);
 }
 
 /** Same shape as the phone version; on the web nothing extra needs rendering. */
 export function useOcr(): {
   status: OcrStatus;
   recognize: (uri: string, onProgress?: (p: number) => void) => Promise<string>;
+  readPdf: (uri: string, onProgress?: PdfProgress) => Promise<PdfText>;
   element: ReactNode;
 } {
-  return { status: 'ready', recognize, element: null };
+  return { status: 'ready', recognize, readPdf, element: null };
 }

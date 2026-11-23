@@ -168,8 +168,11 @@ function TextCard({
   const [listenRun, setListenRun] = useState(0);
   const [noVoice, setNoVoice] = useState(false);
   const [round, setRound] = useState<SingleRound | null>(null);
-  const text = page.text.trim();
-  const lang = detectLanguage(text);
+  const answer = page.text.trim();
+  const question = page.qa ? page.question.trim() : '';
+  // A question card is read aloud as the question followed by its answer.
+  const text = question ? `${question}\n${answer}` : answer;
+  const lang = detectLanguage(answer);
   const dir = lang === 'ar' ? 'rtl' : 'ltr';
 
   useEffect(() => {
@@ -260,8 +263,16 @@ function TextCard({
                 {s.lookHint}
               </Txt>
             )}
+            {question ? (
+              <Row align="flex-start">
+                <Icon name="help-circle-outline" color={c.accent} />
+                <Txt variant="heading" dir={detectLanguage(question) === 'en' ? 'ltr' : 'rtl'} style={{ flex: 1 }}>
+                  {question}
+                </Txt>
+              </Row>
+            ) : null}
             <Txt variant="reading" dir={dir}>
-              {text}
+              {answer}
             </Txt>
           </Card>
           {noVoice ? (

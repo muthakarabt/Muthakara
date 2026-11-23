@@ -27,3 +27,9 @@
   for = "/ocr/*"
   [headers.values]
     Cache-Control = "public, max-age=604800"
+
+# pdf.js is loaded as a JavaScript module; make sure .mjs files are served as JavaScript.
+[[headers]]
+  for = "/ocr/pdf/*.mjs"
+  [headers.values]
+    Content-Type = "text/javascript; charset=utf-8"

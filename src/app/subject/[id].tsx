@@ -4,15 +4,15 @@ import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { Modal, Platform, View } from 'react-native';
+import { Platform, View } from 'react-native';
 
 import { GAME_ICONS, GamePicker } from '@/components/game-picker';
-import { useRewards } from '@/components/rewards';
 import {
   Button,
   Card,
   Empty,
   GradientCard,
+  Icon,
   IconBadge,
   IconButton,
   Input,
@@ -20,6 +20,7 @@ import {
   Row,
   Screen,
   Section,
+  Stepper,
   Txt,
   confirmAction,
   notify,
@@ -29,20 +30,20 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-context';
 import {
-  addPages,
   deleteSubject,
   getSubject,
   listPages,
   renameSubject,
+  setSubjectExam,
   setSubjectGame,
   type GameType,
   type Page,
   type Subject,
 } from '@/lib/db';
 import { relativeDay } from '@/lib/i18n';
-import { setPendingImages } from '@/lib/import-queue';
-import { deleteFiles, persistFile } from '@/lib/media';
-import { todayStr } from '@/lib/srs';
+import { setPendingFile, setPendingImages } from '@/lib/import-queue';
+import { deleteFiles } from '@/lib/media';
+import { addDays, daysToExam, todayStr } from '@/lib/srs';
 import { detectLanguage } from '@/lib/text';
 
 export default function SubjectScreen() {
@@ -50,13 +51,9 @@ export default function SubjectScreen() {
   const subjectId = Number(id);
   const db = useSQLiteContext();
   const { s } = useApp();
-  const { toast } = useRewards();
   const c = useTheme();
   const [subject, setSubject] = useState<Subject | null>(null);
   const [pages, setPages] = useState<Page[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [pdf, setPdf] = useState<{ uri: string } | null>(null);
-  const [range, setRange] = useState({ from: '1', to: '10' });
   const [renaming, setRenaming] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
 
@@ -107,31 +104,8 @@ export default function SubjectScreen() {
   const fromPdf = async () => {
     const res = await DocumentPicker.getDocumentAsync({ type: 'application/pdf', copyToCacheDirectory: true });
     if (res.canceled || !res.assets[0]) return;
-    setBusy(true);
-    try {
-      const uri = await persistFile(res.assets[0].uri, 'pdf');
-      setRange({ from: '1', to: '10' });
-      setPdf({ uri });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const confirmPdf = async () => {
-    if (!pdf) return;
-    const from = Math.max(1, parseInt(range.from, 10) || 1);
-    const to = Math.min(from + 499, Math.max(from, parseInt(range.to, 10) || from));
-    const list = [];
-    for (let n = from; n <= to; n++) list.push({ kind: 'pdf' as const, uri: pdf.uri, label: s.pageN(n) });
-    await addPages(db, subjectId, list);
-    setPdf(null);
-    toast({ icon: 'document-text-outline', title: s.pagesCount(list.length) });
-    await load();
-  };
-
-  const cancelPdf = () => {
-    if (pdf) deleteFiles([pdf.uri]);
-    setPdf(null);
+    setPendingFile(subjectId, { uri: res.assets[0].uri, name: res.assets[0].name });
+    router.push(`/file?subject=${subjectId}`);
   };
 
   const remove = async () => {
@@ -165,6 +139,7 @@ export default function SubjectScreen() {
   const game = subject?.game ?? 'mix';
 
   const addButtons: { icon: IconName; title: string; onPress: () => void }[] = [
+    { icon: 'help-circle-outline', title: s.questionCard, onPress: () => router.push(`/question?subject=${subjectId}`) },
     { icon: 'camera-outline', title: s.camera, onPress: fromCamera },
     { icon: 'images-outline', title: s.gallery, onPress: fromGallery },
     { icon: 'document-text-outline', title: s.pdf, onPress: fromPdf },
@@ -216,12 +191,22 @@ export default function SubjectScreen() {
         />
       </GradientCard>
 
+      <ExamCard
+        examDate={subject?.exam_date ?? ''}
+        hasPages={pages.length > 0}
+        onChange={async (date) => {
+          await setSubjectExam(db, subjectId, date);
+          setSubject((sub) => (sub ? { ...sub, exam_date: date } : sub));
+        }}
+        onCram={() => router.push(`/review?subject=${subjectId}&exam=1`)}
+      />
+
       <Section title={s.addContent}>
         <Row wrap gap={Spacing.two} align="stretch">
           {addButtons.map((b) => (
             <Card
               key={b.icon}
-              onPress={busy ? undefined : b.onPress}
+              onPress={b.onPress}
               style={{ width: '48%', flexGrow: 1, alignItems: 'center', paddingVertical: Spacing.three, gap: Spacing.two }}>
               <IconBadge icon={b.icon} tone="primary" size={42} />
               <Txt variant="caption" bold center>
@@ -231,6 +216,15 @@ export default function SubjectScreen() {
           ))}
         </Row>
       </Section>
+
+      {pages.some((p) => !p.qa && p.text.trim()) ? (
+        <Button
+          variant="secondary"
+          icon="sparkles-outline"
+          title={s.aiButton}
+          onPress={() => router.push(`/ai-questions?subject=${subjectId}`)}
+        />
+      ) : null}
 
       <Section
         title={s.testStyle}
@@ -255,7 +249,7 @@ export default function SubjectScreen() {
         <View style={{ gap: Spacing.two }}>
           {pages.map((p) => {
             const isDue = !!p.due && p.due <= today;
-            const snippet = p.text.trim();
+            const snippet = (p.qa ? p.question : p.text).trim();
             return (
               <Card key={p.id} onPress={() => router.push(`/page/${p.id}`)} style={{ padding: Spacing.three }}>
                 <Row>
@@ -267,16 +261,19 @@ export default function SubjectScreen() {
                     />
                   ) : (
                     <IconBadge
-                      icon={p.kind === 'pdf' ? 'document-text-outline' : 'reader-outline'}
-                      tone="sky"
+                      icon={p.qa ? 'help-circle-outline' : p.kind === 'pdf' ? 'document-text-outline' : 'reader-outline'}
+                      tone={p.qa ? 'accent' : 'sky'}
                       size={52}
                     />
                   )}
                   <View style={{ flex: 1, gap: 2 }}>
                     <Row style={{ justifyContent: 'space-between' }}>
-                      <Txt variant="caption" bold numberOfLines={1} style={{ flex: 1 }}>
-                        {p.label}
-                      </Txt>
+                      <Row gap={4} style={{ flex: 1 }}>
+                        {p.important ? <Icon name="star" size={14} color={c.accent} /> : null}
+                        <Txt variant="caption" bold numberOfLines={1} style={{ flex: 1 }}>
+                          {p.label}
+                        </Txt>
+                      </Row>
                       {!p.studied_on ? (
                         <Pill tone="muted" text={s.statusNew} />
                       ) : (
@@ -302,38 +299,69 @@ export default function SubjectScreen() {
 
       <Button variant="danger" icon="trash-outline" title={s.deleteSubject} onPress={remove} />
 
-      <Modal visible={pdf !== null} transparent animationType="fade" onRequestClose={cancelPdf}>
-        <View style={{ flex: 1, backgroundColor: '#0008', justifyContent: 'center', padding: Spacing.four }}>
-          <Card style={{ backgroundColor: c.cardSolid, maxWidth: 520, width: '100%', alignSelf: 'center' }}>
-            <Txt variant="heading">{s.pdfPagesTitle}</Txt>
-            <Txt variant="caption" muted>
-              {s.pdfPagesHint}
-            </Txt>
-            <Row gap={Spacing.three}>
-              <View style={{ flex: 1 }}>
-                <Input
-                  label={s.fromPage}
-                  keyboardType="number-pad"
-                  value={range.from}
-                  onChangeText={(v) => setRange((r) => ({ ...r, from: v.replace(/\D/g, '') }))}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Input
-                  label={s.toPage}
-                  keyboardType="number-pad"
-                  value={range.to}
-                  onChangeText={(v) => setRange((r) => ({ ...r, to: v.replace(/\D/g, '') }))}
-                />
-              </View>
-            </Row>
-            <Row gap={Spacing.two}>
-              <Button style={{ flex: 1 }} title={s.add} onPress={confirmPdf} />
-              <Button style={{ flex: 1 }} variant="ghost" title={s.cancel} onPress={cancelPdf} />
-            </Row>
-          </Card>
-        </View>
-      </Modal>
     </Screen>
+  );
+}
+
+/** The subject's exam day: once set, reviews come back before it and an exam cram is offered. */
+function ExamCard({
+  examDate,
+  hasPages,
+  onChange,
+  onCram,
+}: {
+  examDate: string;
+  hasPages: boolean;
+  onChange: (date: string) => void;
+  onCram: () => void;
+}) {
+  const { s } = useApp();
+  const c = useTheme();
+  const today = todayStr();
+  const left = daysToExam(examDate, today);
+
+  if (left === null) {
+    return (
+      <Card>
+        <Row align="flex-start">
+          <IconBadge icon="calendar-outline" tone="accent" size={40} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Txt bold>{s.examTitle}</Txt>
+            <Txt variant="caption" muted>
+              {s.examNone}
+            </Txt>
+          </View>
+        </Row>
+        <Button small variant="secondary" icon="calendar" title={s.examSet} onPress={() => onChange(addDays(today, 7))} />
+      </Card>
+    );
+  }
+
+  return (
+    <Card tone="accent">
+      <Row>
+        <Icon name="calendar" color={c.accent} />
+        <Txt variant="heading" style={{ flex: 1 }}>
+          {s.examLeft(left)}
+        </Txt>
+      </Row>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <Txt variant="caption" muted>
+          {s.examInDays}
+        </Txt>
+        <Stepper
+          value={left}
+          min={0}
+          max={180}
+          format={(v) => (v === 0 ? s.today : s.daysCount(v))}
+          onChange={(v) => onChange(addDays(today, v))}
+        />
+      </Row>
+      <Button variant="accent" icon="flash" title={s.examCram} disabled={!hasPages} onPress={onCram} />
+      <Txt variant="caption" muted>
+        {s.examCramHint}
+      </Txt>
+      <Button small variant="ghost" icon="close" title={s.examClear} onPress={() => onChange('')} />
+    </Card>
   );
 }

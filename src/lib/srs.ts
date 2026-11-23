@@ -41,8 +41,34 @@ export function afterStudy(today: string): Schedule {
   return { stage: 0, due: addDays(today, INTERVALS[0]) };
 }
 
-/** Schedule for a page after a review with the given self-grade. */
-export function afterReview(stage: number, grade: Grade, today: string): Schedule {
+/** Parts the teacher stressed never wait longer than this between reviews. */
+export const IMPORTANT_MAX_GAP = 7;
+
+/**
+ * Schedule for a page after a review with the given self-grade.
+ * `exam` (YYYY-MM-DD) is the subject's exam day, if one is coming: the page then
+ * comes back at least twice before it (at most half the days left), so nothing
+ * is left waiting until after the exam.
+ */
+export function afterReview(stage: number, grade: Grade, today: string, important = false, exam?: string | null): Schedule {
+  const s = plainReview(stage, grade, today);
+  let cap: string | null = important ? addDays(today, IMPORTANT_MAX_GAP) : null;
+  const left = exam ? daysBetween(today, exam) : 0;
+  if (left > 0) {
+    const examCap = addDays(today, Math.max(1, Math.floor(left / 2)));
+    if (!cap || examCap < cap) cap = examCap;
+  }
+  return cap && s.due > cap ? { stage: s.stage, due: cap } : s;
+}
+
+/** Days until the exam (0 = today), or null when there is none or it has passed. */
+export function daysToExam(exam: string | null | undefined, today: string): number | null {
+  if (!exam) return null;
+  const d = daysBetween(today, exam);
+  return d >= 0 ? d : null;
+}
+
+function plainReview(stage: number, grade: Grade, today: string): Schedule {
   const current = Math.min(Math.max(stage, 0), LAST_STAGE);
   if (grade === 'again') {
     return { stage: 0, due: addDays(today, INTERVALS[0]) };

@@ -8,71 +8,42 @@
   <body>
     <!--
       Used by the phone app: it opens this page in a hidden WebView, sends a photo
-      and gets the text back. Runs the same self-hosted Tesseract engine as the
-      web app (files in /ocr), so photos are read inside the phone's WebView.
+      and gets the text back. Runs the same self-hosted engine and preparation
+      step (ocr-pipeline.js) as the web app, inside the phone's WebView.
     -->
     <script src="/ocr/tesseract.min.js"></script>
+    <script src="/ocr-pipeline.js"></script>
     <script>
       (function () {
         function send(msg) {
           if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(msg));
         }
-        var current = null;
-        var workerPromise = null;
-        function getWorker() {
-          if (!workerPromise) {
-            workerPromise = Tesseract.createWorker('ara+eng', 1, {
-              workerPath: '/ocr/worker.min.js',
-              corePath: '/ocr/',
-              langPath: '/ocr',
-              gzip: false,
-              logger: function (m) {
-                if (m.status === 'recognizing text' && current !== null) send({ type: 'progress', id: current, progress: m.progress });
-              },
-            }).catch(function (e) {
-              workerPromise = null;
-              throw e;
-            });
-          }
-          return workerPromise;
-        }
-        function prepare(uri) {
-          return new Promise(function (resolve) {
-            var img = new Image();
-            img.onload = function () {
-              var scale = Math.min(3, Math.max(0.5, 2400 / img.naturalWidth));
-              var canvas = document.createElement('canvas');
-              canvas.width = Math.round(img.naturalWidth * scale);
-              canvas.height = Math.round(img.naturalHeight * scale);
-              var ctx = canvas.getContext('2d');
-              ctx.imageSmoothingQuality = 'high';
-              ctx.filter = 'grayscale(1) contrast(1.15)';
-              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-              resolve(canvas.toDataURL('image/png'));
-            };
-            img.onerror = function () {
-              resolve(uri);
-            };
-            img.src = uri;
-          });
-        }
         window.__ocr = function (msg) {
-          current = msg.id;
-          getWorker()
-            .then(function (w) {
-              return prepare(msg.image).then(function (image) {
-                return w.recognize(image);
-              });
-            })
-            .then(function (r) {
-              send({ type: 'result', id: msg.id, text: r.data.text });
-            })
-            .catch(function (e) {
+          MuthakaraOCR.recognize(msg.image, function (p) {
+            send({ type: 'progress', id: msg.id, progress: p });
+          }).then(
+            function (text) {
+              send({ type: 'result', id: msg.id, text: text });
+            },
+            function (e) {
               send({ type: 'error', id: msg.id, error: String(e && e.message ? e.message : e) });
-            });
+            },
+          );
         };
-        // Warm up the engine and language files so the first photo is quick.
-        getWorker().then(
+        window.__pdf = function (msg) {
+          MuthakaraOCR.readPdf(msg.data, function (p, page) {
+            send({ type: 'progress', id: msg.id, progress: p, page: page });
+          }).then(
+            function (r) {
+              send({ type: 'pdf', id: msg.id, pages: r.pages, total: r.total });
+            },
+            function (e) {
+              send({ type: 'error', id: msg.id, error: String(e && e.message ? e.message : e) });
+            },
+          );
+        };
+        // Warm up the engine and Arabic language file so the first photo is quick.
+        MuthakaraOCR.warmUp().then(
           function () {
             send({ type: 'ready' });
           },

@@ -6,6 +6,8 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-context';
 import type { Profile } from '@/lib/db';
+import { AI_KEY_URL } from '@/lib/ai';
+import { CLAUDE_KEY_URL, CLAUDE_MODELS, isClaudeKey } from '@/lib/claude';
 import { buildIcs, downloadIcs, googleCalendarUrl } from '@/lib/calendar';
 import { pickForDay } from '@/lib/i18n';
 import { todayStr } from '@/lib/srs';
@@ -15,6 +17,8 @@ export default function Settings() {
   const { settings, updateSettings, s } = useApp();
   const c = useTheme();
   const [name, setName] = useState(settings.name);
+  const [aiKey, setAiKey] = useState(settings.aiKey);
+  const [showOwnKey, setShowOwnKey] = useState(!!settings.aiKey);
 
   const toggleReminder = async (enabled: boolean) => {
     if (enabled && Platform.OS !== 'web') {
@@ -187,6 +191,92 @@ export default function Settings() {
           <Switch value={settings.sound} onValueChange={(v) => updateSettings({ sound: v })} trackColor={{ true: c.primary }} />,
         )}
       </Card>
+
+      <Section title={s.aiSettingsTitle}>
+        <Card>
+          <Row align="flex-start">
+            <IconBadge icon="sparkles-outline" size={36} tone="accent" />
+            <View style={{ flex: 1, gap: 2 }}>
+              <Txt bold>{s.aiCloudLabel}</Txt>
+              <Txt variant="caption" muted>
+                {s.aiCloudBody}
+              </Txt>
+            </View>
+            <Switch
+              value={settings.aiCloud}
+              onValueChange={(v) => updateSettings({ aiCloud: v })}
+              trackColor={{ true: c.primary }}
+            />
+          </Row>
+          {!showOwnKey ? (
+            <Button variant="ghost" small icon="key-outline" title={s.aiOwnKeyTitle} onPress={() => setShowOwnKey(true)} />
+          ) : null}
+        </Card>
+        {showOwnKey ? (
+        <Card>
+          <Txt bold>{s.aiOwnKeyTitle}</Txt>
+          <Txt variant="caption" muted>
+            {s.aiSettingsBody}
+          </Txt>
+          <Input
+            label={s.aiKeyLabel}
+            value={aiKey}
+            onChangeText={setAiKey}
+            autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry
+            dir="ltr"
+            placeholder="sk-ant-… / AIza…"
+          />
+          {isClaudeKey(settings.aiKey) ? (
+            <View style={{ gap: Spacing.two }}>
+              <Txt variant="caption" muted>
+                {s.aiModelLabel}
+              </Txt>
+              <Segmented
+                value={settings.aiModel}
+                options={CLAUDE_MODELS.map((m) => ({ value: m, label: s.aiModels[m] }))}
+                onChange={(m) => updateSettings({ aiModel: m })}
+              />
+              <Txt variant="caption" muted>
+                {s.aiModelHint}
+              </Txt>
+            </View>
+          ) : null}
+          <Row gap={Spacing.two}>
+            <Button
+              style={{ flex: 1 }}
+              small
+              icon="checkmark"
+              title={s.save}
+              disabled={aiKey.trim() === settings.aiKey}
+              onPress={async () => {
+                await updateSettings({ aiKey: aiKey.trim() });
+                notify(s.aiKeySaved);
+              }}
+            />
+          </Row>
+          <Row gap={Spacing.two}>
+            <Button
+              style={{ flex: 1 }}
+              small
+              variant="secondary"
+              icon="open-outline"
+              title={s.aiGetClaudeKey}
+              onPress={() => Linking.openURL(CLAUDE_KEY_URL)}
+            />
+            <Button
+              style={{ flex: 1 }}
+              small
+              variant="secondary"
+              icon="open-outline"
+              title={s.aiGetKey}
+              onPress={() => Linking.openURL(AI_KEY_URL)}
+            />
+          </Row>
+        </Card>
+        ) : null}
+      </Section>
 
       <Section title={s.howItWorks}>
         <Card tone="primary">

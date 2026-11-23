@@ -13,7 +13,7 @@ import { useApp } from '@/lib/app-context';
 import { addPages, countPages, type NewPage } from '@/lib/db';
 import { clearPendingImages, getPendingImages } from '@/lib/import-queue';
 import { extensionOf, persistFile } from '@/lib/media';
-import { useOcr } from '@/lib/ocr';
+import { useReader } from '@/lib/reader';
 import { cleanOcrText, detectLanguage, splitIntoParts } from '@/lib/text';
 
 type Ocr = { status: 'reading' | 'ready' | 'failed'; progress: number; text: string };
@@ -32,7 +32,7 @@ export default function ImportScreen() {
   const c = useTheme();
   const [uris] = useState(() => (mode === 'text' ? [] : getPendingImages(subjectId)));
   const [index, setIndex] = useState(0);
-  const engine = useOcr();
+  const engine = useReader();
   const [ocr, setOcr] = useState<Ocr>({ status: 'reading', progress: 0, text: '' });
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
@@ -152,7 +152,11 @@ export default function ImportScreen() {
           <Card>
             <Row>
               <ActivityIndicator color={c.primary} />
-              <Txt style={{ flex: 1 }}>{ocr.progress > 0 ? s.readingProgress(Math.round(ocr.progress * 100)) : s.reading}</Txt>
+              <Txt style={{ flex: 1 }}>{engine.usingClaude
+                  ? s.aiUsingClaude
+                  : ocr.progress > 0
+                    ? s.readingProgress(Math.round(ocr.progress * 100))
+                    : s.reading}</Txt>
             </Row>
             <ProgressBar value={ocr.progress} height={6} />
           </Card>

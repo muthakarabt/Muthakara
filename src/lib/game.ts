@@ -96,7 +96,13 @@ export type PlayCard = {
   subject_title: string;
   kind: 'image' | 'pdf' | 'text';
   uri: string;
+  /** 1 = question card: `question` is asked, `text` is the answer. */
+  qa?: number;
 };
+
+export function isQa(card: Pick<PlayCard, 'qa' | 'question' | 'text'>): boolean {
+  return card.qa === 1 && !!card.question.trim() && !!card.text.trim();
+}
 
 export function passageOf(card: Pick<PlayCard, 'text' | 'keywords'>): string {
   return (card.text.trim() || card.keywords.trim()).replace(/\s+/g, ' ');
@@ -131,6 +137,8 @@ export type ClozeRound = {
   type: 'cloze';
   cardId: number;
   subject: string;
+  /** The question on a question card; the blank is in its answer. */
+  prompt?: string;
   before: string;
   after: string;
   answer: string;
@@ -176,6 +184,7 @@ export type TypeRound = {
   type: 'type';
   cardId: number;
   subject: string;
+  prompt?: string;
   before: string;
   after: string;
   answer: string;
@@ -211,6 +220,7 @@ export type OrderRound = {
   type: 'order';
   cardId: number;
   subject: string;
+  prompt?: string;
   /** The words in the right order. */
   answer: string[];
   /** Indexes into `answer`, shuffled. */
@@ -267,13 +277,18 @@ function clip(text: string, max = 70): string {
  */
 export function makeMatch(pool: readonly PlayCard[], size = 4, rng: Rng = Math.random): MatchRound | null {
   const usable = shuffle(
-    pool.filter((p) => passageOf(p).split(/\s+/).length >= 4 || (p.question.trim() && p.keywords.trim())),
+    pool.filter((p) => isQa(p) || passageOf(p).split(/\s+/).length >= 4 || (p.question.trim() && p.keywords.trim())),
     rng,
   ).slice(0, size);
   if (usable.length < 2) return null;
   const prompts: MatchCard[] = [];
   const answers: MatchCard[] = [];
   for (const p of usable) {
+    if (isQa(p)) {
+      prompts.push({ key: `q${p.id}`, pairId: p.id, side: 'prompt', text: clip(p.question) });
+      answers.push({ key: `a${p.id}`, pairId: p.id, side: 'answer', text: clip(p.text) });
+      continue;
+    }
     if (!p.text.trim() && p.question.trim() && p.keywords.trim()) {
       prompts.push({ key: `q${p.id}`, pairId: p.id, side: 'prompt', text: clip(p.question) });
       answers.push({ key: `a${p.id}`, pairId: p.id, side: 'answer', text: clip(p.keywords) });
@@ -287,9 +302,117 @@ export function makeMatch(pool: readonly PlayCard[], size = 4, rng: Rng = Math.r
   return { type: 'match', prompts: shuffle(prompts, rng), answers: shuffle(answers, rng) };
 }
 
+// Question cards
+
+/** Pick the right answer to the question among answers of other question cards. */
+export type ChoiceRound = {
+  type: 'choice';
+  cardId: number;
+  subject: string;
+  prompt: string;
+  answer: string;
+  options: string[];
+};
+
+/** Is this the answer to the question? */
+export type TrueFalseRound = {
+  type: 'truefalse';
+  cardId: number;
+  subject: string;
+  prompt: string;
+  shown: string;
+  /** The real answer, shown afterwards. */
+  answer: string;
+  isTrue: boolean;
+};
+
+function otherAnswers(card: PlayCard, pool: readonly PlayCard[], rng: Rng): string[] {
+  const own = card.text.trim().replace(/\s+/g, ' ');
+  const seen = new Set([own]);
+  const out: string[] = [];
+  // Same subject first: those answers look most alike.
+  const sorted = shuffle(pool.filter((p) => p.id !== card.id && isQa(p)), rng).sort(
+    (a, b) => Number(b.subject_title === card.subject_title) - Number(a.subject_title === card.subject_title),
+  );
+  for (const p of sorted) {
+    const t = p.text.trim().replace(/\s+/g, ' ');
+    if (!seen.has(t)) {
+      seen.add(t);
+      out.push(t);
+    }
+  }
+  return out;
+}
+
+export function makeChoice(card: PlayCard, pool: readonly PlayCard[], rng: Rng = Math.random): ChoiceRound | null {
+  if (!isQa(card)) return null;
+  const others = otherAnswers(card, pool, rng).slice(0, 3);
+  if (others.length < 1) return null;
+  const answer = card.text.trim().replace(/\s+/g, ' ');
+  return {
+    type: 'choice',
+    cardId: card.id,
+    subject: card.subject_title,
+    prompt: card.question.trim(),
+    answer,
+    options: shuffle([answer, ...others], rng),
+  };
+}
+
+export function makeTrueFalse(card: PlayCard, pool: readonly PlayCard[], rng: Rng = Math.random): TrueFalseRound | null {
+  if (!isQa(card)) return null;
+  const others = otherAnswers(card, pool, rng);
+  if (others.length < 1) return null;
+  const answer = card.text.trim().replace(/\s+/g, ' ');
+  const isTrue = rng() < 0.5;
+  return {
+    type: 'truefalse',
+    cardId: card.id,
+    subject: card.subject_title,
+    prompt: card.question.trim(),
+    shown: isTrue ? answer : others[0],
+    answer,
+    isTrue,
+  };
+}
+
+/** Type the whole answer: only for short answers, long ones are tested in parts. */
+export function makeAnswerRound(card: PlayCard): TypeRound | null {
+  if (!isQa(card)) return null;
+  const answer = card.text.trim().replace(/\s+/g, ' ');
+  if (answer.split(' ').length > 4) return null;
+  return { type: 'type', cardId: card.id, subject: card.subject_title, prompt: card.question.trim(), before: '', after: '', answer };
+}
+
+type QaGame = 'choice' | 'truefalse' | 'answer' | 'cloze' | 'type' | 'order';
+
+/** A question card gets a different kind of question each time. */
+export function makeQaRound(
+  card: PlayCard,
+  pool: readonly PlayCard[],
+  game: SingleGame | 'mix',
+  rng: Rng = Math.random,
+): SingleRound | null {
+  const prompt = card.question.trim();
+  const answerCard = { ...card, keywords: '' };
+  const all: QaGame[] = shuffle(['choice', 'truefalse', 'answer', 'cloze', 'type', 'order'] as QaGame[], rng);
+  const order: QaGame[] = game === 'mix' ? all : [game, ...all.filter((g) => g !== game)];
+  for (const g of order) {
+    let r: SingleRound | null = null;
+    if (g === 'choice') r = makeChoice(card, pool, rng);
+    else if (g === 'truefalse') r = makeTrueFalse(card, pool, rng);
+    else if (g === 'answer') r = makeAnswerRound(card);
+    else if (g === 'cloze') r = makeCloze(answerCard, pool.filter((p) => p.id !== card.id), rng);
+    else if (g === 'type') r = makeTypeRound(answerCard, rng);
+    else r = makeOrderRound(answerCard, rng);
+    if (r) return r.type === 'choice' || r.type === 'truefalse' ? r : { ...r, prompt };
+  }
+  return null;
+}
+
 // Choosing a round
 
-export type SingleRound = ClozeRound | TypeRound | OrderRound;
+export type SingleRound = ClozeRound | TypeRound | OrderRound | ChoiceRound | TrueFalseRound;
 export type SingleGame = 'cloze' | 'type' | 'order';
 
 /** Builds one round for a card, trying the requested game first and falling back to any that fits. */
@@ -299,6 +422,7 @@ export function makeRound(
   game: SingleGame | 'mix',
   rng: Rng = Math.random,
 ): SingleRound | null {
+  if (isQa(card)) return makeQaRound(card, pool, game, rng);
   const order: SingleGame[] =
     game === 'mix' ? shuffle(['cloze', 'type', 'order'] as SingleGame[], rng) : [game, 'cloze', 'type', 'order'];
   for (const g of order) {

@@ -16,6 +16,7 @@ import { Backdrop } from '@/components/ui';
 import { Colors } from '@/constants/theme';
 import { AppProvider, useApp } from '@/lib/app-context';
 import { DATABASE_NAME, migrate } from '@/lib/db';
+import { useSingleTab } from '@/lib/single-tab';
 
 function AppStack({ fontsReady }: { fontsReady: boolean }) {
   const { ready } = useApp();
@@ -53,6 +54,14 @@ export default function RootLayout() {
     IBMPlexSansArabic_700Bold,
     ...Ionicons.font,
   });
+  const tabReady = useSingleTab();
+  if (!tabReady) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.background }}>
+        <ActivityIndicator color={c.primary} />
+      </View>
+    );
+  }
   return (
     <ThemeProvider
       value={{ ...base, colors: { ...base.colors, primary: c.primary, background: c.background, card: c.cardSolid } }}>

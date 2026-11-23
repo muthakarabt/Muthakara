@@ -30,8 +30,22 @@ export function cleanOcrText(raw: string): string {
   const text = raw
     .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '') // stray direction marks
     .replace(/\r/g, '')
+    // Symbols that never appear in study text but OCR invents from specks and shadows.
+    .replace(/[|\\[\]{}<>_~^@#$&*`¦§©®¶‹›•·]/g, ' ')
+    // Lines that are only stray marks or single letters (page edges, specks).
+    .split('\n')
+    .filter((line) => !line.trim() || /[\p{L}\p{N}]{2,}/u.test(line))
+    .join('\n')
     .split(/\n{2,}/)
-    .map((para) => para.replace(/\s*\n\s*/g, ' ').replace(/[ \t]+/g, ' ').trim())
+    .map((para) =>
+      para
+        .split(/\s+/)
+        // drop stray marks standing alone, keep real punctuation
+        .filter((w) => /[\p{L}\p{N}]/u.test(w) || /^[.،,؛;:!?؟%+=-]$/.test(w))
+        .join(' ')
+        .replace(/\s+([.،,؛;:!?؟])/g, '$1')
+        .trim(),
+    )
     .filter((para) => para.length > 0)
     .join('\n\n');
   // Arabic text uses the Arabic comma.
