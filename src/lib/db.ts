@@ -88,7 +88,12 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   const version = row?.user_version ?? 0;
   if (version >= SCHEMA_VERSION) return;
+  // One transaction: if the app closes half way, nothing is applied and the next
+  // launch starts over, instead of failing on a column that was already added.
+  await db.withTransactionAsync(() => applyMigrations(db, version));
+}
 
+async function applyMigrations(db: SQLiteDatabase, version: number): Promise<void> {
   if (version < 1) {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS subjects (

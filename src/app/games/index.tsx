@@ -10,6 +10,7 @@ import { Quiz, type QuizOutcome } from '@/components/quiz';
 import { useRewards } from '@/components/rewards';
 import { Button, Card, Empty, GradientCard, Icon, IconBadge, Pill, ProgressBar, Row, Screen, Txt } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
+import { useSingleFlight } from '@/hooks/use-single-flight';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-context';
 import { gamePool, type GameType, type PageWithSubject } from '@/lib/db';
@@ -81,7 +82,7 @@ export default function Games() {
     return () => clearTimeout(t);
   }, [pool, game, run]);
 
-  const finishStep = async (right: number, total: number) => {
+  const finishStep = useSingleFlight(async (right: number, total: number) => {
     const next = { right: score.right + right, total: score.total + total };
     setScore(next);
     if (right > 0) await award(right * XP.gameCorrect, 'game');
@@ -90,7 +91,7 @@ export default function Games() {
       if (next.total > 0 && next.right === next.total) await award(XP.gamePerfectBonus, 'game_perfect');
     }
     setIndex((i) => i + 1);
-  };
+  });
 
   const title = game ? s.games[game] : s.gamesTitle;
 

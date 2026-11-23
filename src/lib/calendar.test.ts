@@ -23,3 +23,9 @@ test('reminder starts tomorrow when today\'s time has passed', () => {
   assert.match(decodeURIComponent(url), /dates=20261123T090000\/20261123T091500/);
   assert.match(decodeURIComponent(url), /recur=RRULE:FREQ=DAILY/);
 });
+
+test('buildIcs escapes text characters that have a meaning in .ics files', () => {
+  const ics = buildIcs({ hour: 9, minute: 0, title: 'a;b,c', bodies: ['x;y\nz'], now: new Date(2026, 10, 22, 12, 0) });
+  assert.match(ics, /SUMMARY:a\\;b\\,c\r\n/);
+  assert.match(ics, /DESCRIPTION:x\\;y\\nz\r\n/);
+});
