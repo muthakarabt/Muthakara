@@ -6,9 +6,10 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, View } from 'react-n
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { useRewards } from '@/components/rewards';
-import { Button, Card, Icon, Input, Pill, ProgressBar, Row, Screen, Txt } from '@/components/ui';
+import { Button, Card, Icon, Input, Pill, ProgressBar, Row, Screen, Txt, notify } from '@/components/ui';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { AiError, aiAvailable, aiSplit, type AiPart } from '@/lib/ai';
 import { useApp } from '@/lib/app-context';
 import { addPages, countPages, type NewPage } from '@/lib/db';
 import { clearPendingImages, getPendingImages } from '@/lib/import-queue';
@@ -27,14 +28,21 @@ export default function ImportScreen() {
   const { subject, mode } = useLocalSearchParams<{ subject: string; mode?: string }>();
   const subjectId = Number(subject);
   const db = useSQLiteContext();
-  const { s } = useApp();
+  const { s, settings } = useApp();
   const { toast } = useRewards();
   const c = useTheme();
   const [uris] = useState(() => (mode === 'text' ? [] : getPendingImages(subjectId)));
   const [index, setIndex] = useState(0);
   const engine = useOcr();
   const [ocr, setOcr] = useState<Ocr>({ status: 'reading', progress: 0, text: '' });
-  const [text, setText] = useState('');
+  const [text, setRawText] = useState('');
+  // Parts written by Claude (with key words and a question); cleared when the text is edited.
+  const [aiParts, setAiParts] = useState<AiPart[] | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const setText = (value: string) => {
+    setRawText(value);
+    setAiParts(null);
+  };
   const [saving, setSaving] = useState(false);
   const [added, setAdded] = useState(0);
 
@@ -68,7 +76,20 @@ export default function ImportScreen() {
   const failed = ocr.status === 'failed' || (!textMode && engineStatus === 'failed');
   const reading = !textMode && !failed && ocr.status === 'reading';
 
-  const parts = splitIntoParts(text.trim());
+  const parts: AiPart[] = aiParts ?? splitIntoParts(text.trim()).map((p) => ({ text: p, keywords: '', question: '' }));
+
+  const organize = async () => {
+    setAiBusy(true);
+    try {
+      const result = await aiSplit(text.trim(), settings.aiCode);
+      if (result.length) setAiParts(result);
+      else notify(s.aiErrors.failed);
+    } catch (e) {
+      notify(s.aiErrors[e instanceof AiError ? e.code : 'failed']);
+    } finally {
+      setAiBusy(false);
+    }
+  };
   const finished = (count: number) => {
     clearPendingImages();
     if (count > 0) toast({ icon: 'checkmark-circle', title: s.partsCount(count) });
@@ -94,7 +115,7 @@ export default function ImportScreen() {
       let pages: NewPage[] = [];
       if (textMode) {
         const label = s.textN(n);
-        pages = parts.map((p, i) => ({ kind: 'text', uri: '', label: s.partOf(label, i + 1, parts.length), text: p }));
+        pages = parts.map((p, i) => ({ kind: 'text', uri: '', label: s.partOf(label, i + 1, parts.length), ...p }));
       } else {
         const stored = await persistFile(uri, extensionOf(uri, 'jpg'));
         const label = s.imageN(n);
@@ -104,7 +125,7 @@ export default function ImportScreen() {
             kind: Platform.OS === 'web' && i > 0 ? 'text' : 'image',
             uri: Platform.OS === 'web' && i > 0 ? '' : stored,
             label: s.partOf(label, i + 1, parts.length),
-            text: p,
+            ...p,
           }));
         } else {
           pages = [{ kind: 'image', uri: stored, label }];
@@ -184,13 +205,48 @@ export default function ImportScreen() {
               dir={text ? dir : undefined}
               style={{ minHeight: 200, fontSize: 17 }}
             />
-            {parts.length > 0 ? <Pill icon="layers-outline" text={s.partsPreview(parts.length)} /> : null}
+            {parts.length > 0 && !aiParts ? <Pill icon="layers-outline" text={s.partsPreview(parts.length)} /> : null}
+            {aiAvailable() && text.trim() && !aiParts ? (
+              <View style={{ gap: Spacing.one }}>
+                <Button
+                  variant="secondary"
+                  icon="sparkles-outline"
+                  title={aiBusy ? s.aiOrganizing : s.aiOrganize}
+                  onPress={organize}
+                  loading={aiBusy}
+                  disabled={saving}
+                />
+                <Txt variant="caption" muted>
+                  {s.aiOrganizeHint}
+                </Txt>
+              </View>
+            ) : null}
+            {aiParts ? (
+              <View style={{ gap: Spacing.two }}>
+                <Pill icon="sparkles-outline" text={s.aiReady(aiParts.length)} />
+                {aiParts.map((p, i) => (
+                  <Card key={i}>
+                    <Txt dir={dir}>{p.text}</Txt>
+                    {p.keywords ? (
+                      <Txt variant="caption" muted dir={dir}>
+                        {`${s.keywords}: ${p.keywords}`}
+                      </Txt>
+                    ) : null}
+                    {p.question ? (
+                      <Txt variant="caption" dir={dir}>
+                        {`${s.question}: ${p.question}`}
+                      </Txt>
+                    ) : null}
+                  </Card>
+                ))}
+              </View>
+            ) : null}
             <Button
               title={s.saveText}
               icon="checkmark"
               onPress={() => save(true)}
               loading={saving}
-              disabled={parts.length === 0}
+              disabled={parts.length === 0 || aiBusy}
             />
             {!textMode ? (
               <Button variant="ghost" icon="image-outline" title={s.saveImageOnly} onPress={() => save(false)} disabled={saving} />

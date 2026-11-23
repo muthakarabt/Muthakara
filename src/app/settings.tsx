@@ -4,6 +4,7 @@ import { Linking, Platform, Switch, View } from 'react-native';
 import { Button, Card, IconBadge, Input, Row, Screen, Section, Segmented, Stepper, Txt, notify } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { aiAvailable } from '@/lib/ai';
 import { useApp } from '@/lib/app-context';
 import type { Profile } from '@/lib/db';
 import { buildIcs, downloadIcs, googleCalendarUrl } from '@/lib/calendar';
@@ -15,6 +16,7 @@ export default function Settings() {
   const { settings, updateSettings, s } = useApp();
   const c = useTheme();
   const [name, setName] = useState(settings.name);
+  const [aiCode, setAiCode] = useState(settings.aiCode);
 
   const toggleReminder = async (enabled: boolean) => {
     if (enabled && Platform.OS !== 'web') {
@@ -180,6 +182,25 @@ export default function Settings() {
           ) : null}
         </Card>
       </Section>
+
+      {aiAvailable() ? (
+        <Section title={s.aiSettingsTitle}>
+          <Card>
+            <Txt variant="caption" muted>
+              {s.aiSettingsHint}
+            </Txt>
+            <Input
+              value={aiCode}
+              onChangeText={setAiCode}
+              onBlur={() => updateSettings({ aiCode: aiCode.trim() })}
+              placeholder={s.aiCodePlaceholder}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </Card>
+        </Section>
+      ) : null}
 
       <Card>
         {row(

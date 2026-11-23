@@ -16,7 +16,7 @@ A spaced-repetition study app: study a few pages a day in a short session, then 
 - **تنبيه يومي** بعبارة تشجيعية مختلفة كل يوم (في تطبيق الجوال).
 - **أصوات من الطبيعة** بدون موسيقى، ونقاط ومستويات وإنجازات.
 - **لغتان:** العربية (طالب/طالبة) والإنجليزية.
-- **خصوصية:** كل البيانات محفوظة على الجهاز فقط، بدون خادم أو اشتراك.
+- **خصوصية:** كل البيانات محفوظة على الجهاز فقط. لو استخدمت مساعد Claude، النص اللي تختار ترتيبه بس يُرسل لـ Claude.
 
 ## التشغيل · Running it
 
@@ -40,6 +40,23 @@ npx expo lint
 cross-origin isolation headers that the in-browser SQLite database needs. Connect the
 repository in Netlify and it deploys on every push to `main`.
 
+## مساعد Claude · Claude helper
+
+زر **«رتّب بـ Claude»** في شاشة إضافة النص يصحّح أخطاء قراءة الصور، ويقسّم النص لمقاطع، ويكتب لكل مقطع كلمات مفتاحية وسؤال مراجعة. وزر **«اقترح بـ Claude»** في تفاصيل المقطع يكتب الكلمات والسؤال لمقطع موجود.
+
+مفتاح Anthropic **ما يدخل الكود ولا المتصفح أبداً**: التطبيق يكلّم دالة Netlify (`netlify/functions/claude.mts`) وهي اللي تحمل المفتاح.
+
+1. في Netlify: **Site configuration → Environment variables** أضف:
+   - `ANTHROPIC_API_KEY` = مفتاحك من console.anthropic.com (علّم عليه Secret).
+   - `MUTHAKARA_ACCESS_CODE` = أي كلمة سر تختارها. بدونها الدالة ترفض كل الطلبات، عشان ما أحد يستهلك رصيدك من الموقع العام.
+2. أعد النشر (Deploys → Trigger deploy).
+3. في التطبيق: **الإعدادات → مساعد Claude** واكتب نفس كلمة السر. تنحفظ في جهازك بس.
+
+The helper uses `claude-opus-5-5` through the official `@anthropic-ai/sdk`. The key stays in the Netlify
+environment; the app only sends the access code. For a phone build, set `EXPO_PUBLIC_AI_URL` to
+`https://<your-site>.netlify.app/.netlify/functions/claude`. Locally, run `npx netlify dev` so the
+function is served next to the app.
+
 ## هيكل الكود · Code layout
 
 | Path | What it holds |
@@ -51,6 +68,8 @@ repository in Netlify and it deploys on every push to `main`.
 | `src/lib/db.ts` | SQLite schema and queries |
 | `src/lib/i18n.ts` | Arabic (male/female) and English text |
 | `src/lib/text.ts` | Splitting text into parts, checking typed answers |
+| `src/lib/ai.ts` | Calls the Claude helper (split text, key words, questions) |
+| `netlify/functions/claude.mts` | Server side of the Claude helper; holds the API key |
 | `src/lib/ocr.web.ts` | Reading text from photos in the browser (Tesseract, self-hosted in `public/ocr`) |
 | `src/lib/speech.ts` | Reading passages aloud |
 | `scripts/copy-ocr-assets.js` | Copies the OCR engine into `public/ocr` after `npm install` |
