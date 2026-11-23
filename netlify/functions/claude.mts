@@ -81,7 +81,12 @@ export default async (req: Request): Promise<Response> => {
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const accessCode = process.env.MUTHAKARA_ACCESS_CODE;
-  if (!apiKey || !accessCode) return json(503, { error: 'not_configured' });
+  if (!apiKey || !accessCode) {
+    // Say which variable is missing (names only, never values) so setup problems are easy to spot.
+    const missing = [!apiKey && 'ANTHROPIC_API_KEY', !accessCode && 'MUTHAKARA_ACCESS_CODE'].filter(Boolean);
+    console.error('Missing environment variables:', missing.join(', '));
+    return json(503, { error: 'not_configured', missing });
+  }
   if (!sameCode(req.headers.get('x-muthakara-code') ?? '', accessCode)) return json(401, { error: 'code' });
 
   let body: { mode?: unknown; text?: unknown };
@@ -125,7 +130,10 @@ export default async (req: Request): Promise<Response> => {
     }
     return json(200, { keywords: String(data.keywords).trim(), question: String(data.question).trim() });
   } catch (error) {
-    if (error instanceof Anthropic.AuthenticationError) return json(503, { error: 'not_configured' });
+    if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
+      console.error('Anthropic rejected the API key', error.status);
+      return json(503, { error: 'bad_key' });
+    }
     if (error instanceof Anthropic.RateLimitError) return json(429, { error: 'busy' });
     if (error instanceof Anthropic.APIError) {
       console.error('Claude API error', error.status, error.message);
