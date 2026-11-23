@@ -213,6 +213,29 @@ function arabic(f: boolean, profile: Profile) {
     imageXofY: (i: number, n: number) => `صورة ${i} من ${n}`,
     pasteTitle: 'إضافة نص',
 
+    // Claude helper
+    aiOrganize: g('رتّب بـ Claude', 'رتّبي بـ Claude'),
+    aiOrganizing: 'Claude يرتّب النص…',
+    aiOrganizeHint: 'يصحّح أخطاء القراءة، ويقسّم النص، ويكتب لكل مقطع كلمات مفتاحية وسؤال.',
+    aiSuggest: g('اقترح بـ Claude', 'اقترحي بـ Claude'),
+    aiReady: (n: number) => `جاهز: ${n === 1 ? 'مقطع واحد' : n === 2 ? 'مقطعين' : `${n} مقاطع`} مع كلمات مفتاحية وأسئلة. ${g('عدّل النص فوق', 'عدّلي النص فوق')} لو تبي ترجع للتقسيم العادي.`,
+    aiSettingsTitle: 'مساعد Claude',
+    aiSettingsHint: g(
+      'اكتب رمز الدخول اللي حطيته في إعدادات Netlify. الرمز يبقى في جهازك بس.',
+      'اكتبي رمز الدخول اللي حطيتيه في إعدادات Netlify. الرمز يبقى في جهازك بس.',
+    ),
+    aiCodePlaceholder: 'رمز الدخول',
+    aiErrors: {
+      no_code: g('أضف رمز الدخول من الإعدادات ← مساعد Claude أول.', 'أضيفي رمز الدخول من الإعدادات ← مساعد Claude أول.'),
+      code: g('رمز الدخول غلط. صحّحه من الإعدادات.', 'رمز الدخول غلط. صحّحيه من الإعدادات.'),
+      not_configured: 'مساعد Claude مو مفعّل في الموقع بعد (المفتاح أو رمز الدخول ناقص في Netlify).',
+      too_long: g('النص طويل مرة. قسّمه على أكثر من مرة.', 'النص طويل مرة. قسّميه على أكثر من مرة.'),
+      busy: g('Claude مشغول الحين. جرّب بعد دقيقة.', 'Claude مشغول الحين. جرّبي بعد دقيقة.'),
+      refused: 'Claude ما قدر يتعامل مع هذا النص.',
+      network: g('ما فيه اتصال. تأكد من الإنترنت وجرّب مرة ثانية.', 'ما فيه اتصال. تأكدي من الإنترنت وجرّبي مرة ثانية.'),
+      failed: g('صار خطأ. جرّب مرة ثانية.', 'صار خطأ. جرّبي مرة ثانية.'),
+    },
+
     // page
     pageDetails: 'التفاصيل',
     passage: 'النص',
@@ -491,6 +514,25 @@ function english(profile: Profile): Dict {
     saveImageOnly: 'Save as photo only',
     imageXofY: (i, n) => `Photo ${i} of ${n}`,
     pasteTitle: 'Add text',
+
+    aiOrganize: 'Organise with Claude',
+    aiOrganizing: 'Claude is organising the text…',
+    aiOrganizeHint: 'Fixes reading mistakes, splits the text, and writes key words and a question for each part.',
+    aiSuggest: 'Suggest with Claude',
+    aiReady: (n) => `Ready: ${n === 1 ? '1 part' : `${n} parts`} with key words and questions. Edit the text above to go back to the normal split.`,
+    aiSettingsTitle: 'Claude helper',
+    aiSettingsHint: 'Type the access code you set in Netlify. It stays on this device only.',
+    aiCodePlaceholder: 'Access code',
+    aiErrors: {
+      no_code: 'Add the access code first: Settings → Claude helper.',
+      code: 'Wrong access code. Fix it in settings.',
+      not_configured: "The Claude helper isn't set up on the site yet (the key or access code is missing in Netlify).",
+      too_long: 'The text is too long. Add it in a few smaller pieces.',
+      busy: 'Claude is busy right now. Try again in a minute.',
+      refused: "Claude couldn't work with this text.",
+      network: 'No connection. Check your internet and try again.',
+      failed: 'Something went wrong. Try again.',
+    },
 
     pageDetails: 'Details',
     passage: 'Text',

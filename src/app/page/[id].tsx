@@ -6,6 +6,7 @@ import { KeyboardAvoidingView, Platform } from 'react-native';
 import { PageView } from '@/components/page-view';
 import { Button, Card, Input, Pill, Row, Screen, Section, Txt, confirmAction, notify } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
+import { AiError, aiAvailable, aiNotes } from '@/lib/ai';
 import { useApp } from '@/lib/app-context';
 import { deletePage, getPage, resetPage, updatePageNotes, type PageWithSubject } from '@/lib/db';
 import { relativeDay } from '@/lib/i18n';
@@ -18,12 +19,13 @@ export default function PageScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const pageId = Number(id);
   const db = useSQLiteContext();
-  const { s } = useApp();
+  const { s, settings } = useApp();
   const [page, setPage] = useState<PageWithSubject | null>(null);
   const [text, setText] = useState('');
   const [keywords, setKeywords] = useState('');
   const [question, setQuestion] = useState('');
   const [saved, setSaved] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const [speaking, setSpeaking] = useState<null | (() => void)>(null);
 
   const load = useCallback(async () => {
@@ -48,6 +50,20 @@ export default function PageScreen() {
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
     await load();
+  };
+
+  /** Claude fills in key words and a question from the passage; the user still taps save. */
+  const suggest = async () => {
+    setSuggesting(true);
+    try {
+      const notes = await aiNotes(text.trim(), settings.aiCode);
+      setKeywords(notes.keywords);
+      setQuestion(notes.question);
+    } catch (e) {
+      notify(s.aiErrors[e instanceof AiError ? e.code : 'failed']);
+    } finally {
+      setSuggesting(false);
+    }
   };
 
   const listen = async () => {
@@ -133,7 +149,20 @@ export default function PageScreen() {
 
         {page.uri ? <PageView page={page} height={320} /> : null}
 
-        <Section title={s.keywords}>
+        <Section
+          title={s.keywords}
+          action={
+            aiAvailable() && text.trim() ? (
+              <Button
+                small
+                variant="secondary"
+                icon="sparkles-outline"
+                title={s.aiSuggest}
+                onPress={suggest}
+                loading={suggesting}
+              />
+            ) : null
+          }>
           <Input placeholder={s.keywordsPlaceholder} value={keywords} onChangeText={setKeywords} multiline />
           <Input label={s.question} placeholder={s.questionPlaceholder} value={question} onChangeText={setQuestion} />
         </Section>

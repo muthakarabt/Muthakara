@@ -63,6 +63,8 @@ export type Settings = {
   sound: boolean;
   /** Web: the home screen already suggested adding the calendar reminder. */
   reminderPrompted: boolean;
+  /** Access code for the Claude helper (checked by the Netlify Function; not the API key). */
+  aiCode: string;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -79,6 +81,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reminderMinute: 0,
   sound: true,
   reminderPrompted: false,
+  aiCode: '',
 };
 
 const SCHEMA_VERSION = 2;
@@ -206,7 +209,7 @@ export async function deleteSubject(db: SQLiteDatabase, id: number): Promise<str
 
 // ---------- pages ----------
 
-export type NewPage = { kind: PageKind; uri: string; label: string; text?: string };
+export type NewPage = { kind: PageKind; uri: string; label: string; text?: string; keywords?: string; question?: string };
 
 export async function addPages(db: SQLiteDatabase, subjectId: number, pages: NewPage[]): Promise<void> {
   if (pages.length === 0) return;
@@ -219,13 +222,15 @@ export async function addPages(db: SQLiteDatabase, subjectId: number, pages: New
   await db.withTransactionAsync(async () => {
     for (const p of pages) {
       await db.runAsync(
-        'INSERT INTO pages (subject_id, kind, uri, label, position, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO pages (subject_id, kind, uri, label, position, text, keywords, question, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         subjectId,
         p.kind,
         p.uri,
         p.label,
         position++,
         p.text ?? '',
+        p.keywords ?? '',
+        p.question ?? '',
         now,
       );
     }
