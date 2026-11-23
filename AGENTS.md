@@ -39,3 +39,7 @@ Docs: https://docs.expo.dev/eas/index.md
 - If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.
 - Expo Go only includes its bundled native modules. After adding a library with native code, the app needs a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
 - Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
+
+## Engineering skills (agent-skills)
+
+`.claude/settings.json` enables the [agent-skills](https://github.com/addyosmani/agent-skills) plugin by Addy Osmani (MIT). It adds lifecycle skills (spec, planning, TDD, debugging, code review, performance, accessibility, security, shipping) and the commands `/spec`, `/plan`, `/build`, `/test`, `/constraints`, `/agent-skills:review`, `/webperf`, `/a11y`, `/code-simplify`, `/ship`. For Expo and React Native APIs, the Expo rules above still win.
