@@ -63,6 +63,18 @@ const NOTES_SCHEMA = {
   additionalProperties: false,
 };
 
+/**
+ * Reads an environment variable and drops what often sneaks in when a value is
+ * pasted into a dashboard: surrounding spaces or new lines, quotes, and a copied
+ * "NAME=" prefix.
+ */
+function envValue(name: string): string {
+  let value = (process.env[name] ?? '').trim();
+  if (value.startsWith(`${name}=`)) value = value.slice(name.length + 1).trim();
+  value = value.replace(/^["'`]+|["'`]+$/g, '').trim();
+  return value;
+}
+
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {
     status,
@@ -79,8 +91,8 @@ function sameCode(given: string, expected: string): boolean {
 export default async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') return json(405, { error: 'method' });
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  const accessCode = process.env.MUTHAKARA_ACCESS_CODE;
+  const apiKey = envValue('ANTHROPIC_API_KEY');
+  const accessCode = envValue('MUTHAKARA_ACCESS_CODE');
   if (!apiKey || !accessCode) {
     // Say which variable is missing (names only, never values) so setup problems are easy to spot.
     const missing = [!apiKey && 'ANTHROPIC_API_KEY', !accessCode && 'MUTHAKARA_ACCESS_CODE'].filter(Boolean);
@@ -88,6 +100,12 @@ export default async (req: Request): Promise<Response> => {
     return json(503, { error: 'not_configured', missing });
   }
   if (!sameCode(req.headers.get('x-muthakara-code') ?? '', accessCode)) return json(401, { error: 'code' });
+  // Anthropic API keys start with "sk-ant-api". Anything else (a claude.ai login, an
+  // admin key, a partial copy) can't work, so say so without calling the API.
+  if (!apiKey.startsWith('sk-ant-api')) {
+    console.error('ANTHROPIC_API_KEY does not look like an API key (expected it to start with sk-ant-api).');
+    return json(503, { error: 'key_format' });
+  }
 
   let body: { mode?: unknown; text?: unknown };
   try {
