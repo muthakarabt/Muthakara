@@ -13,7 +13,7 @@ const ENDPOINT = process.env.EXPO_PUBLIC_AI_URL || (Platform.OS === 'web' ? '/.n
 export type AiPart = { text: string; keywords: string; question: string };
 
 /** Why a request failed, so the screen can say something useful. */
-export type AiErrorCode = 'no_code' | 'code' | 'not_configured' | 'bad_key' | 'too_long' | 'busy' | 'refused' | 'network' | 'failed';
+export type AiErrorCode = 'no_code' | 'code' | 'not_configured' | 'bad_key' | 'key_format' | 'too_long' | 'busy' | 'refused' | 'network' | 'failed';
 
 export class AiError extends Error {
   constructor(public code: AiErrorCode) {
@@ -39,7 +39,7 @@ async function call<T>(mode: 'split' | 'notes', text: string, accessCode: string
   }
   const data = await res.json().catch(() => null);
   if (!res.ok) {
-    const known: AiErrorCode[] = ['code', 'not_configured', 'bad_key', 'too_long', 'busy', 'refused'];
+    const known: AiErrorCode[] = ['code', 'not_configured', 'bad_key', 'key_format', 'too_long', 'busy', 'refused'];
     const code = data?.error;
     throw new AiError(known.includes(code) ? code : res.status === 404 ? 'not_configured' : 'failed');
   }
